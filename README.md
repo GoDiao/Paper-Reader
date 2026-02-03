@@ -4,6 +4,12 @@
 
 [中文文档](README_zh.md) | English
 
+## Why Paper Reader Agent?
+
+**Solves a Critical Pain Point**: Unlike other research agents that can only analyze text, Paper Reader Agent **automatically extracts and embeds figures** from academic papers into the generated reports. This addresses a major limitation in existing solutions where visual content is lost during analysis, making it impossible to fully understand papers that rely heavily on diagrams, charts, and experimental results.
+
+**Key Differentiator**: Our custom PDF parsing algorithm intelligently detects, extracts, and references all figures, ensuring your analysis reports include the complete visual context necessary for comprehensive paper understanding.
+
 ## Key Features
 
 ### Hierarchical Multi-Agent System
