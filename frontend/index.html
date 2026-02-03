@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paper Reader - AI 论文分析助手</title>
+    <meta name="description" content="使用 AI 智能分析学术论文，生成中英文分析报告">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Markdown Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+    
+    <!-- Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    
+    <!-- KaTeX for Math -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-book-reader"></i>
+                <span>Paper Reader</span>
+            </div>
+            <nav class="nav-buttons">
+                <button id="historyBtn" class="nav-btn" title="历史记录">
+                    <i class="fas fa-history"></i>
+                    <span>历史</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Landing Section -->
+        <section id="landingSection" class="landing-section">
+            <div class="landing-content">
+                <h1>
+                    <span class="gradient-text">AI 驱动的</span>
+                    <br>学术论文分析助手
+                </h1>
+                <p class="subtitle">
+                    上传 PDF 论文，AI 自动提取关键信息，生成中英文双语分析报告
+                </p>
+                
+                <!-- Upload Area -->
+                <div id="uploadArea" class="upload-area">
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <p class="upload-text">拖拽 PDF 文件到此处，或点击上传</p>
+                    <p class="upload-hint">支持 .pdf 格式，最大 50MB</p>
+                    <input type="file" id="fileInput" accept=".pdf" hidden>
+                </div>
+                
+                <!-- Upload Progress -->
+                <div id="uploadProgress" class="upload-progress hidden">
+                    <div class="progress-info">
+                        <span id="uploadFileName"></span>
+                        <span id="uploadPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="uploadProgressBar" class="progress-fill"></div>
+                    </div>
+                </div>
+                
+                <!-- Settings Panel -->
+                <div id="settingsPanel" class="settings-panel hidden">
+                    <h3><i class="fas fa-cog"></i> 分析设置</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label for="analysisMode">分析模式</label>
+                            <select id="analysisMode">
+                                <option value="hierarchical" selected>层级模式 (1+3+1 Agent Team)</option>
+                                <option value="simple">简单模式 (双角色)</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="llmProvider">LLM 提供商</label>
+                            <select id="llmProvider">
+                                <option value="deepseek" selected>DeepSeek</option>
+                                <option value="openai">OpenAI</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="llmModel">模型</label>
+                            <select id="llmModel">
+                                <option value="deepseek-chat" selected>deepseek-chat</option>
+                                <option value="gpt-4o">gpt-4o</option>
+                                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="startAnalysisBtn" class="btn btn-primary btn-large">
+                        <i class="fas fa-play"></i> 开始分析
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Analysis Section -->
+        <section id="analysisSection" class="analysis-section hidden">
+            <!-- Progress Panel -->
+            <div class="progress-panel">
+                <h2><i class="fas fa-tasks"></i> 分析进度</h2>
+                <div id="progressSteps" class="progress-steps">
+                    <!-- Phase 1: Parsing -->
+                    <div class="progress-step" data-phase="parsing">
+                        <div class="step-icon">
+                            <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">PDF 解析</div>
+                            <div class="step-status">等待中...</div>
+                        </div>
+                        <div class="step-indicator"></div>
+                    </div>
+                    
+                    <!-- Phase 2: Analysis -->
+                    <div class="progress-step" data-phase="analysis" data-agent="architect">
+                        <div class="step-icon">
+                            <i class="fas fa-drafting-compass"></i>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Architect</div>
+                            <div class="step-status">等待中...</div>
+                        </div>
+                        <div class="step-indicator"></div>
+                    </div>
+                    
+                    <div class="progress-step" data-phase="analysis" data-agent="context_hunter">
+                        <div class="step-icon">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Context Hunter</div>
+                            <div class="step-status">等待中...</div>
+                        </div>
+                        <div class="step-indicator"></div>
+                    </div>
+                    
+                    <div class="progress-step" data-phase="analysis" data-agent="math_specialist">
+                        <div class="step-icon">
+                            <i class="fas fa-square-root-alt"></i>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Math Specialist</div>
+                            <div class="step-status">等待中...</div>
+                        </div>
+                        <div class="step-indicator"></div>
+                    </div>
+                    
+                    <div class="progress-step" data-phase="analysis" data-agent="data_auditor">
+                        <div class="step-icon">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Data Auditor</div>
+                            <div class="step-status">等待中...</div>
+                        </div>
+                        <div class="step-indicator"></div>
+                    </div>
+                    
+                    <!-- Phase 3: Assembly -->
+                    <div class="progress-step" data-phase="assembly" data-agent="editor_english">
+                        <div class="step-icon">
+                            <i class="fas fa-edit"></i>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Editor (EN)</div>
+                            <div class="step-status">等待中...</div>
+                        </div>
+                        <div class="step-indicator"></div>
+                    </div>
+                    
+                    <div class="progress-step" data-phase="assembly" data-agent="editor_chinese">
+                        <div class="step-icon">
+                            <i class="fas fa-language"></i>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Editor (ZH)</div>
+                            <div class="step-status">等待中...</div>
+                        </div>
+                        <div class="step-indicator"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Report Panel -->
+            <div id="reportPanel" class="report-panel hidden">
+                <div class="report-header">
+                    <h2 id="reportTitle"><i class="fas fa-file-alt"></i> 分析报告</h2>
+                    <div class="report-tabs">
+                        <button class="tab-btn active" data-lang="en">
+                            <i class="fas fa-globe"></i> English
+                        </button>
+                        <button class="tab-btn" data-lang="zh">
+                            <i class="fas fa-language"></i> 中文
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Export Actions -->
+                <div class="export-actions">
+                    <button id="openChatBtn" class="export-btn" title="与AI讨论论文">
+                        <i class="fas fa-comments"></i> 与AI讨论
+                    </button>
+                    <button class="export-btn" data-format="md" title="下载 Markdown">
+                        <i class="fas fa-file-lines"></i> MD
+                    </button>
+                    <button class="export-btn" data-format="pdf" title="下载 PDF">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </button>
+                    <button class="export-btn" data-format="docx" title="下载 Word">
+                        <i class="fas fa-file-word"></i> DOCX
+                    </button>
+                    <button class="export-btn" id="downloadImages" title="下载图片">
+                        <i class="fas fa-images"></i> 图片
+                    </button>
+                    <button class="export-btn" id="copyReport" title="复制到剪贴板">
+                        <i class="fas fa-copy"></i> 复制
+                    </button>
+                </div>
+                
+                <!-- Report Content -->
+                <div id="reportContent" class="report-content">
+                    <div class="report-lang active" data-lang="en"></div>
+                    <div class="report-lang" data-lang="zh"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chat Section -->
+        <section id="chatSection" class="chat-section hidden">
+            <div class="chat-header">
+                <h2><i class="fas fa-comments"></i> 与 AI 讨论论文</h2>
+                <button id="toggleChat" class="btn btn-icon" title="关闭聊天">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="chatMessages" class="chat-messages">
+                <div class="chat-welcome">
+                    <i class="fas fa-robot"></i>
+                    <p>你好！我已阅读了这篇论文的分析报告。有什么问题想问我吗？</p>
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <textarea id="chatInput" placeholder="输入你的问题..." rows="1"></textarea>
+                <button id="sendChatBtn" class="btn btn-primary" title="发送">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- History Sidebar -->
+    <aside id="historySidebar" class="history-sidebar hidden">
+        <div class="sidebar-header">
+            <h3><i class="fas fa-history"></i> 历史记录</h3>
+            <button id="closeHistory" class="btn btn-icon">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="sidebar-search">
+            <input type="text" id="historySearch" placeholder="搜索历史记录...">
+            <i class="fas fa-search"></i>
+        </div>
+        <div id="historyList" class="history-list">
+            <!-- History items will be populated here -->
+        </div>
+    </aside>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+        <i class="toast-icon"></i>
+        <span class="toast-message"></span>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p id="loadingText">加载中...</p>
+        </div>
+    </div>
+
+    <script src="/static/scripts.js?v=5"></script>
+</body>
+</html>
