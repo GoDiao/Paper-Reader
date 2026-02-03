@@ -1,12 +1,12 @@
 # Paper Reader Agent
 
-📚 **An AI-powered academic paper analysis system with hierarchical multi-agent architecture and interactive web interface.**
+**An AI-powered academic paper analysis system with hierarchical multi-agent architecture and interactive web interface.**
 
 [中文文档](README_zh.md) | English
 
-## ✨ Key Features
+## Key Features
 
-### 🤖 Hierarchical Multi-Agent System
+### Hierarchical Multi-Agent System
 
 - **Architect Agent**: Plans analysis structure and coordinates specialist agents
 - **Specialist Agents**:
@@ -15,7 +15,7 @@
   - *Data Auditor*: Critically examines experimental results and statistical validity
 - **Editor Agent**: Synthesizes specialist insights into coherent, publication-quality reports
 
-### 🌐 Modern Web Interface
+### Modern Web Interface
 
 - **Real-time Progress Tracking**: WebSocket-powered live updates during analysis
 - **Interactive Rendering**: Perfect LaTeX formula rendering with KaTeX
@@ -23,14 +23,14 @@
 - **AI Chat**: Multi-turn Q&A about paper content
 - **History Management**: Persistent storage and retrieval of all analyses
 
-### 📄 Advanced PDF Processing
+### Advanced PDF Processing
 
-- **Academic-grade Parsing**: Powered by MinerU (magic-pdf) for superior layout analysis
-- **Formula Extraction**: Preserves LaTeX equations with high fidelity
-- **Figure Extraction**: Automatically extracts and embeds figures in reports
+- **Custom Parsing Algorithm**: Proprietary layout analysis engine optimized for academic papers
+- **Formula Extraction**: Preserves LaTeX equations with high fidelity using PyMuPDF
+- **Smart Figure Detection**: Intelligent region-based image extraction and merging
 - **Table Recognition**: Structured extraction of tabular data
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -46,7 +46,7 @@ cd paper_reader
 pip install -r requirements.txt
 ```
 
-> ⚠️ **Note**: MinerU requires GPU acceleration for optimal performance. CPU mode is supported but significantly slower.
+> **Note**: GPU acceleration is recommended for optimal PDF parsing performance. CPU mode is supported but significantly slower.
 
 ### Configuration
 
@@ -70,7 +70,7 @@ export DEEPSEEK_API_KEY=your_api_key
 
 ### Running the Application
 
-#### 🌐 Web Interface (Recommended)
+#### Web Interface (Recommended)
 
 Launch the web server:
 
@@ -82,14 +82,14 @@ Then navigate to `http://localhost:8000` in your browser.
 
 **Web Features:**
 
-- 📤 Drag-and-drop PDF upload
-- ⚡ Real-time analysis progress visualization
-- 🌍 Side-by-side English/Chinese reports
-- 💬 Interactive AI discussion
-- 📥 Export to Markdown/PDF/DOCX
-- 📚 Searchable analysis history
+- Drag-and-drop PDF upload
+- Real-time analysis progress visualization
+- Side-by-side English/Chinese reports
+- Interactive AI discussion
+- Export to Markdown/PDF/DOCX
+- Searchable analysis history
 
-#### 💻 Command Line Interface
+#### Command Line Interface
 
 ```bash
 # Basic usage with DeepSeek
@@ -105,7 +105,7 @@ python main.py paper.pdf --provider openai --model gpt-4o
 python main.py paper.pdf -v
 ```
 
-## 📋 CLI Arguments
+## CLI Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
@@ -118,7 +118,7 @@ python main.py paper.pdf -v
 | `--no-images` | Skip image extraction | `False` |
 | `-v, --verbose` | Save intermediate outputs | `False` |
 
-## 📁 Output Structure
+## Output Structure
 
 ```
 outputs/
@@ -136,7 +136,7 @@ outputs/
         └── 03_data_auditor.md
 ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 paper_reader/
@@ -155,50 +155,50 @@ paper_reader/
 │   ├── specialists/       # Domain-specific agents
 │   └── editor.py          # Report synthesis
 ├── parsers/               # PDF processing
-│   └── pdf_parser.py      # MinerU integration
+│   └── pdf_parser.py      # Custom parsing algorithm
 ├── generators/            # Report generation
 │   └── report_generator.py
 ├── main.py                # CLI entry point
 └── web_server.py          # Web server entry point
 ```
 
-## 🔧 Technical Stack
+## Technical Stack
 
 - **Backend**: FastAPI, WebSocket, asyncio
 - **Frontend**: Vanilla JavaScript, Showdown.js (Markdown), KaTeX (LaTeX)
-- **PDF Parsing**: MinerU (magic-pdf) - State-of-the-art academic PDF parser
+- **PDF Parsing**: Custom algorithm built on PyMuPDF with intelligent layout analysis
 - **LLM Integration**: DeepSeek API / OpenAI API
 - **Agent Architecture**: Hierarchical multi-agent with role specialization
 - **Storage**: JSON-based persistence for simplicity and portability
 
-## 🎯 Use Cases
+## Use Cases
 
 - **Researchers**: Quickly understand new papers in your field
 - **Students**: Deep comprehension of complex academic materials
 - **Literature Review**: Systematic analysis of multiple papers
 - **Paper Writing**: Learn from methodology and experimental design
 
-## 🐛 Known Issues & Limitations
+## Known Issues & Limitations
 
 - PDF parsing quality depends on the original document structure
 - GPU recommended for reasonable parsing speed (CPU mode is slow)
 - LLM API costs can accumulate with large papers
 - Image extraction may miss figures embedded in complex layouts
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) for details
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- [MinerU](https://github.com/opendatalab/MinerU) for excellent PDF parsing
+- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for robust PDF processing capabilities
 - [DeepSeek](https://www.deepseek.com/) for powerful and affordable LLM API
 - All contributors and users of this project
 
 ---
 
-**Star ⭐ this repo if you find it useful!**
+**Star this repo if you find it useful!**
