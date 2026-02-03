@@ -97,7 +97,7 @@ Examples:
     parser.add_argument(
         "--api-key",
         type=str,
-        default="sk-75146ef2997e4d419e9c3347b7a4ee24",
+        default="",
         help="API key (overrides environment variable)"
     )
     
