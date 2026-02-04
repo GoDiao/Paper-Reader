@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi import File, UploadFile, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse, StreamingResponse, StreamingResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -39,6 +39,7 @@ from backend.websocket_manager import ProgressCallback
 from parsers.pdf_parser import PDFParser
 from agents.hierarchical_orchestrator import HierarchicalOrchestrator
 from generators.report_generator import ReportGenerator
+from config import LLMConfig
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -250,6 +251,7 @@ async def run_analysis(
             orchestrator = HierarchicalOrchestrator(
                 provider=provider,
                 model=model,
+                max_tokens=LLMConfig(model=model).get_max_tokens(),  # Model-specific token limit
                 verbose=verbose
             )
             
@@ -542,6 +544,58 @@ async def chat_with_report(report_id: str, request: Request):
         }
     except Exception as e:
         logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/reports/{report_id}/chat/stream")
+async def chat_with_report_stream(report_id: str, request: Request):
+    """Chat with AI about a report (streaming)."""
+    try:
+        data = await request.json()
+        message = data.get("message", "")
+        
+        # Get report
+        report = await report_store.get_report(report_id)
+        if not report:
+            raise HTTPException(status_code=404, detail="Report not found")
+        
+        # Get chat history
+        messages = await report_store.get_chat_messages(report_id)
+        
+        # Add user message
+        await report_store.add_chat_message(report_id, "user", message)
+        
+        # Build messages for API
+        chat_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+        chat_messages.append({"role": "user", "content": message})
+        
+        async def generate():
+            chat_agent = ChatAgent()
+            report_content = report.get("report_en") or report.get("report_zh", "")
+            
+            full_response = ""
+            full_metadata = {"model": chat_agent.model}
+            
+            try:
+                # chat_stream is a synchronous generator, so we iterate it directly.
+                for chunk in chat_agent.chat_stream(report_content, chat_messages):
+                    if chunk:
+                        full_response += chunk
+                        yield chunk
+                        # Small sleep to allow event loop to breathe if needed
+                        await asyncio.sleep(0)
+                
+                # Save assistant response after stream finishes
+                await report_store.add_chat_message(report_id, "assistant", full_response, full_metadata)
+                
+            except Exception as e:
+                logger.error(f"Stream generation error: {e}")
+                yield f"\n\n[Error: {str(e)}]"
+
+        return StreamingResponse(generate(), media_type="text/plain")
+
+    except Exception as e:
+        logger.error(f"Chat stream init error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

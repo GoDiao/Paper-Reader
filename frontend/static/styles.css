@@ -1258,3 +1258,116 @@ h3 {
         justify-content: center;
     }
 }
+
+/* ============================================
+   Embedded Chat Section
+   ============================================ */
+
+.chat-section-embedded {
+    margin-top: var(--spacing-xl);
+    border-top: 1px solid var(--border-color);
+    padding: var(--spacing-lg);
+    background: var(--bg-secondary);
+    border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
+}
+
+.chat-section-embedded .chat-header {
+    padding: 0 0 var(--spacing-md) 0;
+    border-bottom: none;
+}
+
+.chat-section-embedded .chat-messages {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    height: 500px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.chat-section-embedded .chat-input-container {
+    padding: 0;
+    border: none;
+}
+
+.chat-section-embedded .chat-welcome {
+    text-align: center;
+    color: var(--text-muted);
+    padding: var(--spacing-xl);
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+.chat-section-embedded .chat-welcome i {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-md);
+    color: var(--primary);
+    opacity: 0.5;
+}
+
+/* ============================================
+   Chat Markdown Styles
+   ============================================ */
+
+.message-content.markdown-body {
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.message-content.markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 0.9em;
+}
+
+.message-content.markdown-body th,
+.message-content.markdown-body td {
+    border: 1px solid var(--border-color);
+    padding: 0.5em;
+    text-align: left;
+}
+
+.message-content.markdown-body th {
+    background-color: var(--bg-tertiary);
+    font-weight: 600;
+}
+
+.message-content.markdown-body pre {
+    background: var(--bg-tertiary);
+    padding: 1em;
+    border-radius: var(--border-radius-sm);
+    overflow-x: auto;
+    margin: 1em 0;
+}
+
+.message-content.markdown-body code {
+    font-family: monospace;
+    background: var(--bg-tertiary);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.message-content.markdown-body pre code {
+    background: none;
+    padding: 0;
+}
+
+.message-content.markdown-body ul,
+.message-content.markdown-body ol {
+    padding-left: 1.5em;
+    margin: 1em 0;
+}
+
+.message-content.markdown-body blockquote {
+    border-left: 4px solid var(--primary);
+    padding-left: 1em;
+    margin: 1em 0;
+    color: var(--text-muted);
+}

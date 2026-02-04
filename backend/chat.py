@@ -115,7 +115,49 @@ class ChatAgent:
         except Exception as e:
             logger.error(f"Chat API error: {e}")
             raise
+        except Exception as e:
+            logger.error(f"Chat API error: {e}")
+            raise
     
+    def chat_stream(
+        self,
+        report: str,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 2048
+    ):
+        """
+        Stream chat response.
+        """
+        # Build system prompt with report
+        system_prompt = CHAT_SYSTEM_PROMPT.format(report=report[:30000])
+        
+        # Build messages list
+        api_messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add conversation history
+        for msg in messages[-10:]:
+            api_messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=api_messages,
+                max_tokens=max_tokens,
+                temperature=0.7,
+                stream=True
+            )
+            
+            for chunk in response:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content
+                    
+        except Exception as e:
+            logger.error(f"Chat stream error: {e}")
+            raise
     def chat_sync(
         self,
         report: str,

@@ -304,6 +304,45 @@ function initUpload() {
 
     // Start analysis button
     elements.startAnalysisBtn.addEventListener('click', startAnalysis);
+
+    // Dynamic model filtering based on provider
+    const llmProviderSelect = document.getElementById('llmProvider');
+    const llmModelSelect = document.getElementById('llmModel');
+
+    if (llmProviderSelect && llmModelSelect) {
+        llmProviderSelect.addEventListener('change', () => {
+            updateModelOptions(llmProviderSelect.value, llmModelSelect);
+        });
+        // Initialize with current provider selection
+        updateModelOptions(llmProviderSelect.value, llmModelSelect);
+    }
+}
+
+// Model options for each provider
+const modelOptions = {
+    deepseek: [
+        { value: 'deepseek-chat', label: 'deepseek-chat' },
+        { value: 'deepseek-reasoner', label: 'deepseek-r1 (Reasoning)' }
+    ],
+    openai: [
+        { value: 'gpt-4o', label: 'gpt-4o' },
+        { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+        { value: 'o1', label: 'o1 (Reasoning)' },
+        { value: 'o1-mini', label: 'o1-mini' }
+    ]
+};
+
+function updateModelOptions(provider, selectElement) {
+    const models = modelOptions[provider] || modelOptions.deepseek;
+    selectElement.innerHTML = '';
+
+    models.forEach((model, index) => {
+        const option = document.createElement('option');
+        option.value = model.value;
+        option.textContent = model.label;
+        if (index === 0) option.selected = true;
+        selectElement.appendChild(option);
+    });
 }
 
 async function handleFileUpload(file) {
@@ -673,6 +712,14 @@ function renderSpecialistReports(specialistReports) {
         const container = document.querySelector(`.specialist-report[data-specialist="${key}"]`);
         if (!container || !markdown) return;
 
+        // Fix table formatting: ensure there is a blank line before each table header row
+        // 1. Normalize line endings to \n
+        markdown = markdown.replace(/\r\n/g, '\n');
+
+        // 2. Insert blank line before table if missing.
+        // Matches: (Non-newline char) -> \n -> (Table Header) -> \n -> (Table Separator)
+        markdown = markdown.replace(/([^\n])\n(\|.*\|[ \t]*\n\|[-:| ]+\|)/g, '$1\n\n$2');
+
         // CRITICAL: Protect LaTeX from Markdown processor (same as main reports)
         const mathBlocks = [];
         let mathIndex = 0;
@@ -832,37 +879,64 @@ async function downloadImages() {
 // ============================================
 
 function initChat() {
-    elements.sendChatBtn.addEventListener('click', sendChatMessage);
+    if (elements.sendChatBtn) {
+        elements.sendChatBtn.addEventListener('click', sendChatMessage);
+    }
 
-    elements.chatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendChatMessage();
-        }
-    });
+    if (elements.chatInput) {
+        elements.chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
 
-    elements.toggleChat.addEventListener('click', () => {
-        elements.chatSection.classList.add('hidden');
-    });
+        // Auto-resize textarea
+        elements.chatInput.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+            if (this.value === '') this.style.height = '';
+        });
+    }
 
-    elements.openChatBtn.addEventListener('click', () => {
-        elements.chatSection.classList.remove('hidden');
-    });
+    if (elements.openChatBtn) {
+        elements.openChatBtn.addEventListener('click', () => {
+            const chatSection = document.getElementById('chatSection');
+            if (chatSection) {
+                chatSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Focus input
+                if (elements.chatInput) setTimeout(() => elements.chatInput.focus(), 500);
+            }
+        });
+    }
 }
 
 async function sendChatMessage() {
     const message = elements.chatInput.value.trim();
     if (!message || !state.reportId) return;
 
-    // Clear input
+    // Clear input & reset height
     elements.chatInput.value = '';
+    elements.chatInput.style.height = '';
 
     // Add user message to UI
     addChatMessage('user', message);
 
+    // Add placeholder for assistant
+    const responseDiv = addChatMessage('assistant', '');
+    const contentDiv = responseDiv.querySelector('.message-content');
+    contentDiv.innerHTML = '<span class="typing">Thinking...</span>';
+
+    // Initialize converter
+    const converter = new showdown.Converter({
+        tables: true,
+        strikethrough: true,
+        tasklists: true
+    });
+
     // Send to API
     try {
-        const response = await fetch(`/api/reports/${state.reportId}/chat`, {
+        const response = await fetch(`/api/reports/${state.reportId}/chat/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message })
@@ -870,12 +944,64 @@ async function sendChatMessage() {
 
         if (!response.ok) throw new Error('Chat request failed');
 
-        const data = await response.json();
-        addChatMessage('assistant', data.response.content);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value, { stream: true });
+            fullContent += text;
+
+            // Protect Math
+            const mathBlocks = [];
+            let mathIndex = 0;
+            let protectedContent = fullContent
+                .replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+                    mathBlocks.push(match);
+                    return `<!--MATH${mathIndex++}-->`;
+                })
+                .replace(/\$[^\$\n]+?\$/g, (match) => {
+                    mathBlocks.push(match);
+                    return `<!--MATH${mathIndex++}-->`;
+                });
+
+            // Render markdown using Showdown
+            let html = converter.makeHtml(protectedContent);
+
+            // Restore Math
+            html = html.replace(/<!--MATH(\d+)-->/g, (match, index) => {
+                return mathBlocks[parseInt(index)] || match;
+            });
+
+            contentDiv.innerHTML = html;
+
+            // Highlight code blocks
+            contentDiv.querySelectorAll('pre code').forEach(block => {
+                if (typeof hljs !== 'undefined') hljs.highlightElement(block);
+            });
+
+            // Re-render math
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(contentDiv, {
+                    delimiters: [
+                        { left: '$$', right: '$$', display: true },
+                        { left: '$', right: '$', display: false }
+                    ],
+                    throwOnError: false
+                });
+            }
+
+
+            // Scroll to bottom
+            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+        }
 
     } catch (error) {
         console.error('Chat error:', error);
-        addChatMessage('assistant', '抱歉，发生了错误。请稍后再试。');
+        contentDiv.innerHTML += '<br><span style="color:var(--error)">[Error: Request failed. Please try again.]</span>';
     }
 }
 
@@ -886,10 +1012,50 @@ function addChatMessage(role, content) {
 
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${role}`;
-    messageDiv.innerHTML = `<div class="message-content">${escapeHtml(content)}</div>`;
 
+    let innerHTML = '';
+    if (role === 'user') {
+        innerHTML = `<div class="message-content">${escapeHtml(content)}</div>`;
+    } else {
+        // Assistant message - potentially markdown
+        if (content) {
+            const converter = new showdown.Converter({
+                tables: true,
+                strikethrough: true,
+                tasklists: true
+            });
+
+            // Protect Math
+            const mathBlocks = [];
+            let mathIndex = 0;
+            let protectedContent = content
+                .replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+                    mathBlocks.push(match);
+                    return `<!--MATH${mathIndex++}-->`;
+                })
+                .replace(/\$[^\$\n]+?\$/g, (match) => {
+                    mathBlocks.push(match);
+                    return `<!--MATH${mathIndex++}-->`;
+                });
+
+            let html = converter.makeHtml(protectedContent);
+
+            // Restore Math
+            html = html.replace(/<!--MATH(\d+)-->/g, (match, index) => {
+                return mathBlocks[parseInt(index)] || match;
+            });
+
+            innerHTML = `<div class="message-content markdown-body">${html}</div>`;
+        } else {
+            innerHTML = `<div class="message-content"></div>`;
+        }
+    }
+
+    messageDiv.innerHTML = innerHTML;
     elements.chatMessages.appendChild(messageDiv);
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+
+    return messageDiv;
 }
 
 // ============================================

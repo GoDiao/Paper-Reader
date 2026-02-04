@@ -6,16 +6,29 @@ Supports both OpenAI and DeepSeek APIs.
 
 import os
 from pathlib import Path
-from typing import Optional, Literal
-from pydantic import BaseModel, Field
+from typing import Optional, Literal, ClassVar
 from dotenv import load_dotenv
-
+from pydantic import BaseModel, Field
 # Load environment variables
 load_dotenv()
 
 
 class LLMConfig(BaseModel):
     """LLM API Configuration"""
+    
+    # Model-specific token limits (thinking models need more output tokens)
+    MODEL_TOKEN_LIMITS: ClassVar[dict] = {
+        # DeepSeek models
+        "deepseek-chat": 8192,
+        "deepseek-reasoner": 16384,   # DeepSeek-R1 (official API name)
+        "deepseek-r1-distill": 16384, # Distilled reasoning model
+        # OpenAI models
+        "gpt-4o": 16384,
+        "gpt-4o-mini": 16384,
+        "o1": 32768,                  # OpenAI reasoning model
+        "o1-mini": 32768,
+        "o1-preview": 32768,
+    }
     
     provider: Literal["openai", "deepseek"] = Field(
         default="deepseek",
@@ -46,8 +59,17 @@ class LLMConfig(BaseModel):
     
     max_tokens: int = Field(
         default=8192,
-        description="Maximum tokens in response"
+        description="Maximum tokens in response (overridden by model-specific limits)"
     )
+    
+    def get_max_tokens(self) -> int:
+        """Get max tokens for the current model, with special handling for thinking models"""
+        return self.MODEL_TOKEN_LIMITS.get(self.model, self.max_tokens)
+    
+    def is_thinking_model(self) -> bool:
+        """Check if the current model is a reasoning/thinking model"""
+        thinking_models = {"deepseek-r1", "deepseek-r1-distill", "o1", "o1-mini", "o1-preview"}
+        return self.model in thinking_models
     
     def get_api_key(self) -> str:
         """Get API key from config or environment"""
@@ -75,6 +97,7 @@ class LLMConfig(BaseModel):
             return "https://api.deepseek.com"
         
         return None  # Use default for OpenAI
+
 
 
 class ParserConfig(BaseModel):
