@@ -14,7 +14,112 @@ const state = {
     websocket: null,
     reports: { english: '', chinese: '' },
     specialistReports: {},
-    currentLang: 'en'
+    currentLang: 'en',
+    uiLang: localStorage.getItem('uiLang') || 'en'  // UI language preference
+};
+
+// Internationalization translations
+const translations = {
+    en: {
+        // Header
+        history: 'History',
+
+        // Landing
+        hero_title_1: 'AI-Powered',
+        hero_title_2: 'Academic Paper Analyzer',
+        hero_subtitle: 'Upload a PDF paper, AI automatically extracts key information and generates bilingual analysis reports',
+        upload_text: 'Drag and drop PDF file here, or click to upload',
+        upload_hint: 'Supports .pdf format, max 50MB',
+        analysis_settings: 'Analysis Settings',
+        analysis_mode: 'Analysis Mode',
+        mode_hierarchical: 'Hierarchical (1+3+1 Agent Team)',
+        mode_simple: 'Simple (Dual Role)',
+        llm_provider: 'LLM Provider',
+        model: 'Model',
+        start_analysis: 'Start Analysis',
+
+        // Progress
+        analysis_progress: 'Analysis Progress',
+        pdf_parsing: 'PDF Parsing',
+        waiting: 'Waiting...',
+
+        // Report
+        analysis_report: 'Analysis Report',
+        chat_ai: 'Chat with AI',
+        images: 'Images',
+        copy: 'Copy',
+        specialist_reports: 'Specialist Reports',
+
+        // Chat
+        chat_with_paper: 'Chat with AI about Paper',
+        chat_welcome: 'Hello! I have read the analysis of this paper. What questions do you have?',
+        chat_placeholder: 'Type your question...',
+
+        // Tooltips
+        download_md: 'Download Markdown',
+        download_pdf: 'Download PDF',
+        download_word: 'Download Word',
+        download_images: 'Download Images',
+        copy_clipboard: 'Copy to Clipboard',
+        chat_with_ai: 'Chat with AI about Paper',
+        close_chat: 'Close Chat',
+        send: 'Send',
+
+        // Toast messages
+        analysis_complete: 'Analysis Complete!',
+        copied: 'Copied to clipboard!',
+        copy_failed: 'Copy failed'
+    },
+    zh: {
+        // Header
+        history: '历史',
+
+        // Landing
+        hero_title_1: 'AI 驱动的',
+        hero_title_2: '学术论文分析助手',
+        hero_subtitle: '上传 PDF 论文，AI 自动提取关键信息，生成中英文双语分析报告',
+        upload_text: '拖拽 PDF 文件到此处，或点击上传',
+        upload_hint: '支持 .pdf 格式，最大 50MB',
+        analysis_settings: '分析设置',
+        analysis_mode: '分析模式',
+        mode_hierarchical: '层级模式 (1+3+1 Agent Team)',
+        mode_simple: '简单模式 (双角色)',
+        llm_provider: 'LLM 提供商',
+        model: '模型',
+        start_analysis: '开始分析',
+
+        // Progress
+        analysis_progress: '分析进度',
+        pdf_parsing: 'PDF 解析',
+        waiting: '等待中...',
+
+        // Report
+        analysis_report: '分析报告',
+        chat_ai: '与AI讨论',
+        images: '图片',
+        copy: '复制',
+        specialist_reports: '专家分析报告',
+
+        // Chat
+        chat_with_paper: '与 AI 讨论论文',
+        chat_welcome: '你好！我已阅读了这篇论文的分析报告。有什么问题想问我吗？',
+        chat_placeholder: '输入你的问题...',
+
+        // Tooltips
+        download_md: '下载 Markdown',
+        download_pdf: '下载 PDF',
+        download_word: '下载 Word',
+        download_images: '下载图片',
+        copy_clipboard: '复制到剪贴板',
+        chat_with_ai: '与AI讨论论文',
+        close_chat: '关闭聊天',
+        send: '发送',
+
+        // Toast messages
+        analysis_complete: '分析完成！',
+        copied: '已复制到剪贴板！',
+        copy_failed: '复制失败'
+    }
 };
 
 // Markdown converter
@@ -83,6 +188,7 @@ const elements = {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    initI18n();  // Initialize language system first
     initUpload();
     initTabs();
     initExport();
@@ -91,6 +197,69 @@ document.addEventListener('DOMContentLoaded', () => {
     initSpecialistReports();
     loadHistory();
 });
+
+// ============================================
+// Internationalization (i18n)
+// ============================================
+
+function initI18n() {
+    const langToggleBtn = document.getElementById('langToggleBtn');
+    const langLabel = document.getElementById('langLabel');
+
+    // Apply saved language on load
+    applyLanguage(state.uiLang);
+
+    // Toggle language on button click
+    if (langToggleBtn) {
+        langToggleBtn.addEventListener('click', () => {
+            state.uiLang = state.uiLang === 'en' ? 'zh' : 'en';
+            localStorage.setItem('uiLang', state.uiLang);
+            applyLanguage(state.uiLang);
+        });
+    }
+}
+
+function applyLanguage(lang) {
+    const t = translations[lang] || translations.en;
+    const langLabel = document.getElementById('langLabel');
+
+    // Update language button label
+    if (langLabel) {
+        langLabel.textContent = lang === 'en' ? 'EN' : '中';
+    }
+
+    // Update all elements with data-i18n attribute
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (t[key]) {
+            el.textContent = t[key];
+        }
+    });
+
+    // Update all elements with data-i18n-title attribute  
+    document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (t[key]) {
+            el.setAttribute('title', t[key]);
+        }
+    });
+
+    // Update all elements with data-i18n-placeholder attribute
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (t[key]) {
+            el.setAttribute('placeholder', t[key]);
+        }
+    });
+
+    // Update select options with data-i18n
+    document.querySelectorAll('option[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (t[key]) {
+            el.textContent = t[key];
+        }
+    });
+}
 
 // ============================================
 // File Upload
