@@ -71,6 +71,7 @@ class ReportStore:
             "report_zh": report_zh,
             "specialist_reports": metadata.get("specialist_reports", {}) if metadata else {},
             "chat_messages": [],
+            "chat_context_summary": "",
             "metadata": metadata or {},
             "created_at": timestamp,
             "updated_at": timestamp
@@ -105,6 +106,19 @@ class ReportStore:
             report["metadata"].update(metadata)
         
         report["updated_at"] = int(datetime.now().timestamp() * 1000)
+        
+        await self._save()
+        return True
+    
+    async def update_chat_context(self, report_id: str, context_summary: str) -> bool:
+        """Update the chat context summary for a report."""
+        await self._load()
+        
+        if report_id not in self._cache:
+            return False
+            
+        self._cache[report_id]["chat_context_summary"] = context_summary
+        self._cache[report_id]["updated_at"] = int(datetime.now().timestamp() * 1000)
         
         await self._save()
         return True

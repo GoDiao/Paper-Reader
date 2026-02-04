@@ -518,10 +518,24 @@ async def chat_with_report(report_id: str, request: Request):
     # Get chat history
     messages = await report_store.get_chat_messages(report_id)
     
+    # Handle Context Summarization
+    current_summary = report.get("chat_context_summary", "")
+    
+    # Check if we need to summarize (every 10 messages)
+    if len(messages) > 0 and len(messages) % 10 == 0:
+        logger.info(f"Summarizing chat history for report {report_id} (messages: {len(messages)})")
+        chat_agent = ChatAgent()
+        new_summary = await chat_agent.summarize_history(current_summary, messages[-10:])
+        
+        # Save new summary
+        await report_store.update_chat_context(report_id, new_summary)
+        current_summary = new_summary
+        logger.info(f"Updated context summary length: {len(new_summary)}")
+
     # Add user message
     await report_store.add_chat_message(report_id, "user", message)
     
-    # Build messages for API
+    # Build messages for API (include user message)
     chat_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
     chat_messages.append({"role": "user", "content": message})
     
@@ -529,7 +543,12 @@ async def chat_with_report(report_id: str, request: Request):
     try:
         chat_agent = ChatAgent()
         report_content = report.get("report_en") or report.get("report_zh", "")
-        response, metadata = await chat_agent.chat(report_content, chat_messages)
+        
+        response, metadata = await chat_agent.chat(
+            report=report_content, 
+            messages=chat_messages,
+            context_summary=current_summary
+        )
         
         # Save assistant response
         await report_store.add_chat_message(report_id, "assistant", response, metadata)
@@ -562,6 +581,22 @@ async def chat_with_report_stream(report_id: str, request: Request):
         # Get chat history
         messages = await report_store.get_chat_messages(report_id)
         
+        # Handle Context Summarization
+        current_summary = report.get("chat_context_summary", "")
+        
+        # Check if we need to summarize (every 10 messages)
+        # Note: We create a new ChatAgent instance here just for summarization if needed
+        if len(messages) > 0 and len(messages) % 10 == 0:
+            logger.info(f"Summarizing chat history for report {report_id} (messages: {len(messages)})")
+            # We initialize a temporary agent for summarization
+            summarizer_agent = ChatAgent()
+            new_summary = await summarizer_agent.summarize_history(current_summary, messages[-10:])
+            
+            # Save new summary
+            await report_store.update_chat_context(report_id, new_summary)
+            current_summary = new_summary
+            logger.info(f"Updated context summary length: {len(new_summary)}")
+
         # Add user message
         await report_store.add_chat_message(report_id, "user", message)
         
@@ -578,7 +613,11 @@ async def chat_with_report_stream(report_id: str, request: Request):
             
             try:
                 # chat_stream is a synchronous generator, so we iterate it directly.
-                for chunk in chat_agent.chat_stream(report_content, chat_messages):
+                for chunk in chat_agent.chat_stream(
+                    report=report_content, 
+                    messages=chat_messages,
+                    context_summary=current_summary
+                ):
                     if chunk:
                         full_response += chunk
                         yield chunk

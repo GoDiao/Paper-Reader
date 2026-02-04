@@ -68,6 +68,9 @@ const translations = {
         // Toast messages
         analysis_complete: 'Analysis Complete!',
         copied: 'Copied to clipboard!',
+        analysis_complete: 'Analysis Complete!',
+        completed: 'Completed',
+        copied: 'Copied to clipboard!',
         copy_failed: 'Copy failed'
     },
     zh: {
@@ -117,6 +120,9 @@ const translations = {
 
         // Toast messages
         analysis_complete: '分析完成！',
+        copied: '已复制到剪贴板！',
+        analysis_complete: '分析完成！',
+        completed: '已完成',
         copied: '已复制到剪贴板！',
         copy_failed: '复制失败'
     }
@@ -514,7 +520,8 @@ function handleAnalysisComplete(data) {
         step.classList.add('completed');
         const statusEl = step.querySelector('.step-status');
         if (statusEl) {
-            statusEl.textContent = '已完成';
+            statusEl.setAttribute('data-i18n', 'completed');
+            statusEl.textContent = translations[state.uiLang].completed;
         }
     });
 
@@ -903,7 +910,7 @@ function initChat() {
         elements.openChatBtn.addEventListener('click', () => {
             const chatSection = document.getElementById('chatSection');
             if (chatSection) {
-                chatSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                chatSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 // Focus input
                 if (elements.chatInput) setTimeout(() => elements.chatInput.focus(), 500);
             }

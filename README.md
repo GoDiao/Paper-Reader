@@ -176,6 +176,16 @@ paper_reader/
 
 ---
 
+## 🚀 Changelog
+
+### v1.1.0 - Premium UI & Chat Upgrade
+
+- **✨ New UI**: Introduced a "Deep Space" glassmorphism theme for a premium reading experience.
+- **🤖 Smart Chat**: Added context summarization to the Chat AI, allowing for longer, more coherent discussions about the paper.
+- **📊 Specialist Reports**: View detailed analysis from specific agents (Context Hunter, Math Specialist, Data Auditor) in dedicated tabs.
+- **🌐 Bilingual**: Added full English/Chinese language switching.
+- **🐛 Fixes**: Resolved table rendering issues and improved chat interface scrolling.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Whether it's a new specialist agent, better parsing logic, or UI improvements.
