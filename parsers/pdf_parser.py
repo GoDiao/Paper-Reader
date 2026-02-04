@@ -218,7 +218,7 @@ class PDFParser:
             # 2. Merge overlapping or close rectangles
             # This is critical for "sliced" images
             # Use higher horizontal tolerance for side-by-side fragments
-            merged_rects = self._merge_rects(image_rects, tolerance_x=70, tolerance_y=30)
+            merged_rects = self._merge_rects(image_rects, tolerance_x=50, tolerance_y=30)
             
             # 3. Render each merged region
             for rect in merged_rects:
@@ -285,9 +285,9 @@ class PDFParser:
         # to capture multi-line captions
         search_height = 80
         search_rect = fitz.Rect(
-            rect.x0 - 15,           # Wider to catch full caption width
+            rect.x0 - 20,           # Wider to catch full caption width
             rect.y1,                # Start from bottom of image
-            rect.x1 + 15,           # Wider
+            rect.x1 + 20,           # Wider
             min(rect.y1 + search_height, page.rect.height)
         )
         

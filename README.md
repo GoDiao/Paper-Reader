@@ -21,6 +21,24 @@
 
 **Paper Reader Agent** is an advanced AI system designed to read, analyze, and synthesize academic papers with a depth that matches human researchers.
 
+<details>
+<summary><b>📸 Click to see Screenshots (UI & Features)</b></summary>
+
+| **Modern Web UI (Bilingual)** | **Real-time Progress Tracking** |
+|:---:|:---:|
+| <img src="assets/webui_en.png" alt="English UI" width="100%"/> | <img src="assets/progress_view.png" alt="Analysis Progress" width="100%"/> |
+| *Clean interface with EN/ZH switching* | *Visualize the 5-agent team in action* |
+
+| **Publication-Quality Reports** | **Specialist Deep Dives** |
+|:---:|:---:|
+| <img src="assets/report_preview.png" alt="Final Report" width="100%"/> | <img src="assets/specialist.png" alt="Specialist Reports" width="100%"/> |
+| *Auto-embedded figures & formulas* | *Rich details from specific domains* |
+
+</details>
+<br>
+
+**Paper Reader Agent** goes beyond simple summarization...
+
 Unlike standard summary tools, it employs a **Hierarchical Multi-Agent Architecture (1+3+1)** to mimic a professional research team:
 
 1. **Architect**: Deconstructs the paper and plans the reading strategy.

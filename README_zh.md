@@ -21,6 +21,24 @@
 
 **Paper Reader Agent** 是一个先进的 AI 系统，旨在像人类研究员一样深度阅读、分析并综合学术论文。
 
+<details>
+<summary><b>📸 点击查看功能截图 (Showcase)</b></summary>
+
+| **现代化双语 Web 界面** | **实时 Agent 协作进度** |
+|:---:|:---:|
+| <img src="assets/webui_zh.png" alt="中文界面" width="100%"/> | <img src="assets/progress_view.png" alt="分析进度" width="100%"/> |
+| *支持中英文一键切换* | *可视化 1+3+1 Agent 团队工作流* |
+
+| **出版级分析报告** | **专家深度分析 (新功能)** |
+|:---:|:---:|
+| <img src="assets/report_preview.png" alt="最终报告" width="100%"/> | <img src="assets/specialist.png" alt="专家报告" width="100%"/> |
+| *自动嵌入公式与插图* | *查看特定领域的深度洞察* |
+
+</details>
+<br>
+
+**Paper Reader Agent** 与普通的摘要工具不同...
+
 与普通的摘要工具不同，它采用 **层级化多 Agent 架构 (1+3+1)** 来模拟专业的研究团队：
 
 1. **架构师 (Architect)**：解构论文并规划阅读策略。
