@@ -1,48 +1,78 @@
 # Paper Reader Agent
 
-**一个基于层级化多 Agent 架构的 AI 学术论文深度解析系统，配备交互式 Web 界面。**
+<div align="center">
+  <img src="assets/banner.png" alt="Paper Reader Agent Banner" width="30%" />
 
-[English](README.md) | 中文文档
+  <br />
+  
+  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![DeepSeek](https://img.shields.io/badge/DeepSeek-Powered-blue)](https://www.deepseek.com/)
+  [![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991)](https://openai.com/)
 
-## 为什么选择 Paper Reader Agent？
+  **基于层级化多 Agent 架构的学术论文深度解析系统**
+  
+  [English](README.md) | 中文文档
+</div>
 
-**解决关键痛点**：与其他只能分析文本的研究 Agent 不同，Paper Reader Agent **能够自动提取并嵌入学术论文中的图片**到生成的报告中。这解决了现有方案的一个重大局限——视觉内容在分析过程中丢失，导致无法完整理解那些严重依赖图表、实验结果可视化的论文。
+<br />
 
-**核心优势**：我们的自研 PDF 解析算法能够智能检测、提取并引用所有图片，确保您的分析报告包含完整的视觉上下文，这对于全面理解论文至关重要。
+## 📖 简介
 
-## 核心特性
+**Paper Reader Agent** 是一个先进的 AI 系统，旨在像人类研究员一样深度阅读、分析并综合学术论文。
 
-### 层级化多 Agent 系统
+与普通的摘要工具不同，它采用 **层级化多 Agent 架构 (1+3+1)** 来模拟专业的研究团队：
 
-- **架构师 Agent**：规划分析结构并协调专家 Agent
-- **专家 Agent**：
-  - *Context Hunter*：探索研究背景与相关工作
-  - *Math Specialist*：深入数学公式推导
-  - *Data Auditor*：严格审查实验结果与统计有效性
-- **编辑 Agent**：将专家见解综合为连贯的高质量报告
+1. **架构师 (Architect)**：解构论文并规划阅读策略。
+2. **专家团队 (Specialist Team)**：并行专家分别分析背景、数学推导和数据实验。
+3. **主编 (Editor)**：综合生成出版级质量的报告，并自动嵌入相关图表。
 
-### 现代化 Web 界面
+> **核心特性**：系统能够检测、提取并真正“看见”论文中的插图，将其直接嵌入到分析报告的相关讨论中，保留完整的视觉上下文。
 
-- **实时进度追踪**：基于 WebSocket 的实时更新
-- **交互式渲染**：完美的 KaTeX 公式渲染
-- **双语报告**：自动生成中英文对照分析
-- **AI 对话**：针对论文内容的多轮问答
-- **历史管理**：所有分析结果的持久化存储与检索
+---
 
-### 高级 PDF 处理
+## 🏗️ 架构设计
 
-- **自研解析算法**：基于 PyMuPDF 构建的智能布局分析引擎，专为学术论文优化
-- **公式提取**：高保真保留 LaTeX 公式
-- **智能图片检测**：基于区域的智能图片提取与合并
-- **表格识别**：结构化提取表格数据
+系统采用由中心规划者编排的“分而治之”策略。
 
-## 快速开始
+<div align="center">
+  <img src="assets/archv1.png" alt="架构图" width="80%" />
+</div>
+
+---
+
+## ✨ 核心功能
+
+### 🧠 层级化智能
+
+- **架构师 (Architect)**：战略性规划阅读重点和方向。
+- **背景猎人 (Context Hunter)**：挖掘“真正”的研究动机和隐含假设。
+- **数学专家 (Math Specialist)**：推导公式并解释数学背后的物理直觉。
+- **数据审计员 (Data Auditor)**：批判性审查基线、方差和实验公平性。
+
+### 👁️ 视觉理解
+
+- **智能提取**：基于 PyMuPDF 的自定义 PDF 解析管线，精确分割文本和图像。
+- **上下文保留**：图片与其相关文本保持关联。
+- **自动嵌入**：AI 会在讨具体内容时自动将图片插入到报告中。
+
+### 💻 现代化交互
+
+- **Web 界面**：简洁响应式的 UI，支持实时分析进度展示。
+- **双模式**：
+  - `Simple`：快速架构师 + 数学检查。
+  - `Hierarchical`：全功能 5-Agent 深度分析。
+- **双语支持**：同时生成原生质量的中文和英文报告。
+
+---
+
+## 🚀 快速开始
 
 ### 环境要求
 
 - Python 3.8+
-- CUDA 兼容 GPU（推荐，用于加速 PDF 解析）
-- DeepSeek 或 OpenAI 的 API 密钥
+- API 密钥 (DeepSeek 或 OpenAI)
+- (可选) CUDA GPU 用于加速布局分析
 
 ### 安装
 
@@ -52,159 +82,98 @@ cd paper_reader
 pip install -r requirements.txt
 ```
 
-> **注意**：建议使用 GPU 加速以获得最佳 PDF 解析性能。支持 CPU 模式但速度较慢。
-
 ### 配置
 
 在项目根目录创建 `.env` 文件：
 
-```bash
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
+```env
+DEEPSEEK_API_KEY=sk-your-key
 # 或
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=sk-your-key
 ```
 
-或设置环境变量：
+### 使用方法
 
-```bash
-# Windows
-set DEEPSEEK_API_KEY=your_api_key
+#### 1. Web 界面 (推荐)
 
-# Linux/Mac
-export DEEPSEEK_API_KEY=your_api_key
-```
-
-### 运行应用
-
-#### Web 界面（推荐）
-
-启动 Web 服务器：
+启动服务器以获得完整的交互体验。
 
 ```bash
 python web_server.py
 ```
 
-然后在浏览器中访问 `http://localhost:8000`
+在浏览器中打开 **<http://localhost:8000**。>
 
-**Web 功能：**
-
-- 拖拽上传 PDF
-- 实时分析进度可视化
-- 中英文对照报告
-- 交互式 AI 讨论
-- 导出为 Markdown/PDF/DOCX
-- 可搜索的分析历史
-
-#### 命令行界面
+#### 2. 命令行 (CLI)
 
 ```bash
-# 基本用法（使用 DeepSeek）
-python main.py path/to/paper.pdf
+# 全层级深度分析 (默认)
+python main.py papers/attention_is_all_you_need.pdf
 
-# 指定输出目录
-python main.py paper.pdf -o ./my_analysis
+# 保存所有 Agent 的中间输出
+python main.py paper.pdf --verbose
 
-# 使用 OpenAI GPT-4
+# 使用 OpenAI 替代 DeepSeek
 python main.py paper.pdf --provider openai --model gpt-4o
-
-# 详细模式（保存中间输出）
-python main.py paper.pdf -v
 ```
-
-## 命令行参数
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `pdf_path` | PDF 文件路径 | (必需) |
-| `-o, --output` | 输出目录 | `./output` |
-| `--provider` | LLM 提供商 (`openai`/`deepseek`) | `deepseek` |
-| `--model` | 模型名称 | 自动选择 |
-| `--api-key` | API 密钥 | 从环境变量读取 |
-| `--no-gpu` | 禁用 GPU 加速 | `False` |
-| `--no-images` | 跳过图片提取 | `False` |
-| `-v, --verbose` | 保存中间输出 | `False` |
-
-## 输出结构
-
-```
-outputs/
-└── {论文名称}_{时间戳}/
-    ├── paper_analysis.md       # 英文报告
-    ├── paper_analysis_zh.md    # 中文报告
-    ├── figure_index.json       # 图片元数据
-    ├── images/                 # 提取的图片
-    │   ├── Figure_1.png
-    │   ├── Figure_2.png
-    │   └── ...
-    └── specialists/            # 专家 Agent 报告
-        ├── 01_context_hunter.md
-        ├── 02_math_specialist.md
-        └── 03_data_auditor.md
-```
-
-## 项目结构
-
-```
-paper_reader/
-├── backend/                # FastAPI 后端与 WebSocket 管理
-│   ├── app.py             # 主 API 端点
-│   ├── websocket_manager.py
-│   └── report_store.py    # 报告持久化
-├── frontend/              # 原生 JS/CSS Web 界面
-│   ├── index.html
-│   └── static/
-│       ├── scripts.js
-│       └── styles.css
-├── agents/                # 多 Agent 系统
-│   ├── orchestrator.py    # 层级化编排
-│   ├── architect.py       # 规划 Agent
-│   ├── specialists/       # 领域专家 Agent
-│   └── editor.py          # 报告综合
-├── parsers/               # PDF 处理
-│   └── pdf_parser.py      # 自研解析算法
-├── generators/            # 报告生成
-│   └── report_generator.py
-├── main.py                # CLI 入口
-└── web_server.py          # Web 服务器入口
-```
-
-## 技术栈
-
-- **后端**：FastAPI、WebSocket、asyncio
-- **前端**：原生 JavaScript、Showdown.js（Markdown）、KaTeX（LaTeX）
-- **PDF 解析**：基于 PyMuPDF 的自研智能布局分析算法
-- **LLM 集成**：DeepSeek API / OpenAI API
-- **Agent 架构**：层级化多 Agent 与角色专业化
-- **存储**：基于 JSON 的持久化，简单且可移植
-
-## 使用场景
-
-- **研究人员**：快速理解领域内的新论文
-- **学生**：深入理解复杂的学术材料
-- **文献综述**：系统化分析多篇论文
-- **论文写作**：学习方法论和实验设计
-
-## 已知问题与限制
-
-- PDF 解析质量取决于原始文档结构
-- 建议使用 GPU 以获得合理的解析速度（CPU 模式较慢）
-- 大型论文的 LLM API 成本可能累积
-- 图片提取可能遗漏复杂布局中的嵌入图片
-
-## 贡献
-
-欢迎贡献！请随时提交 Pull Request。
-
-## 许可证
-
-MIT License - 详见 [LICENSE](LICENSE)
-
-## 致谢
-
-- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) 提供强大的 PDF 处理能力
-- [DeepSeek](https://www.deepseek.com/) 提供强大且经济的 LLM API
-- 所有本项目的贡献者和用户
 
 ---
 
-**如果觉得有用，请给本项目点个 Star！**
+## 📂 输出结构
+
+系统将输出组织得井井有条：
+
+```text
+outputs/
+└── {论文标题}_{时间戳}/
+    ├── paper_analysis.md       # 🇬🇧 英文最终报告
+    ├── paper_analysis_zh.md    # 🇨🇳 中文最终报告
+    ├── images/                 # 🖼️ 所有提取的插图
+    │   ├── Figure_1.png
+    │   └── ...
+    ├── specialists/            # 🕵️ 中间专家报告
+    │   ├── 01_context_hunter.md
+    │   ├── 02_math_specialist.md
+    │   └── 03_data_auditor.md
+    └── figure_index.json       # 元数据
+```
+
+---
+
+## 🛠️ 项目结构
+
+```text
+paper_reader/
+├── agents/                 # 🤖 大脑
+│   ├── hierarchical_orchestrator.py
+│   ├── hierarchical_prompts.py
+│   └── ...
+├── parsers/                # 👁️ 眼睛
+│   └── pdf_parser.py       # 自定义布局分析
+├── generators/             # 📝 记录员
+│   └── report_generator.py # 报告组装
+├── backend/                # 🔌 API 服务端
+└── frontend/               # 🖥️ Web 前端
+```
+
+---
+
+## 🤝 贡献
+
+欢迎提交 PR！无论是新的专家 Agent、更好的解析逻辑，还是 UI 改进。
+
+1. Fork 本项目
+2. 创建您的特性分支
+3. 提交您的更改
+4. 推送到分支
+5. 开启 Pull Request
+
+## 📄 许可证
+
+本项目基于 MIT 许可证开源。详见 `LICENSE` 文件。
+
+---
+
+<div align="center">
+  <b>如果这个项目对您的研究有帮助，请给个 Star ⭐！</b>
+</div>

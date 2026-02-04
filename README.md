@@ -1,48 +1,78 @@
 # Paper Reader Agent
 
-**An AI-powered academic paper analysis system with hierarchical multi-agent architecture and interactive web interface.**
+<div align="center">
+  <img src="assets/banner.png" alt="Paper Reader Agent Banner" width="30%" height="30%" />
 
-[中文文档](README_zh.md) | English
+  <br />
+  
+  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![DeepSeek](https://img.shields.io/badge/DeepSeek-Powered-blue)](https://www.deepseek.com/)
+  [![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991)](https://openai.com/)
 
-## Why Paper Reader Agent?
+  **Hierarchical Multi-Agent System for Academic Paper Deep Analysis**
+  
+  [中文文档](README_zh.md) | English
+</div>
 
-**Solves a Critical Pain Point**: Unlike other research agents that can only analyze text, Paper Reader Agent **automatically extracts and embeds figures** from academic papers into the generated reports. This addresses a major limitation in existing solutions where visual content is lost during analysis, making it impossible to fully understand papers that rely heavily on diagrams, charts, and experimental results.
+<br />
 
-**Key Differentiator**: Our custom PDF parsing algorithm intelligently detects, extracts, and references all figures, ensuring your analysis reports include the complete visual context necessary for comprehensive paper understanding.
+## 📖 Introduction
 
-## Key Features
+**Paper Reader Agent** is an advanced AI system designed to read, analyze, and synthesize academic papers with a depth that matches human researchers.
 
-### Hierarchical Multi-Agent System
+Unlike standard summary tools, it employs a **Hierarchical Multi-Agent Architecture (1+3+1)** to mimic a professional research team:
 
-- **Architect Agent**: Plans analysis structure and coordinates specialist agents
-- **Specialist Agents**:
-  - *Context Hunter*: Explores research background and related work
-  - *Math Specialist*: Deep-dives into mathematical formulations and derivations
-  - *Data Auditor*: Critically examines experimental results and statistical validity
-- **Editor Agent**: Synthesizes specialist insights into coherent, publication-quality reports
+1. **Architect**: Deconstructs the paper and plans the reading strategy.
+2. **Specialist Team**: Parallel experts analyze Context, Math, and Data.
+3. **Editor**: Synthesizes a publication-quality report with embedded figures.
 
-### Modern Web Interface
+> **Key Feature**: The system detects, extracts, and literally *sees* figures, embedding them directly into the analysis where they are discussed, maintaining full visual context.
 
-- **Real-time Progress Tracking**: WebSocket-powered live updates during analysis
-- **Interactive Rendering**: Perfect LaTeX formula rendering with KaTeX
-- **Bilingual Reports**: Automatic generation of English and Chinese analysis
-- **AI Chat**: Multi-turn Q&A about paper content
-- **History Management**: Persistent storage and retrieval of all analyses
+---
 
-### Advanced PDF Processing
+## 🏗️ Architecture
 
-- **Custom Parsing Algorithm**: Proprietary layout analysis engine optimized for academic papers
-- **Formula Extraction**: Preserves LaTeX equations with high fidelity using PyMuPDF
-- **Smart Figure Detection**: Intelligent region-based image extraction and merging
-- **Table Recognition**: Structured extraction of tabular data
+The system operates using a "Divide and Conquer" strategy orchestrated by a central planner.
 
-## Quick Start
+<div align="center">
+  <img src="assets/archv1.png" alt="Architecture Diagram" width="80%" />
+</div>
+
+---
+
+## ✨ Key Features
+
+### 🧠 Hierarchical Intelligence
+
+- **Architect Agent**: Strategic planning of what to read and where to focus.
+- **Context Hunter**: Digs for the "real" motivation and hidden assumptions.
+- **Math Specialist**: Derives equations and explains physical intuition behind formulas.
+- **Data Auditor**: Critically checks baselines, variance, and experimental fairness.
+
+### 👁️ Visual Understanding
+
+- **Smart Extraction**: Custom PDF parsing pipeline (based on PyMuPDF) that segments text and images.
+- **Context Preservation**: Figures are kept with their relevant text.
+- **Auto-Embedding**: The AI inserts figures into the report exactly when discussing them.
+
+### 💻 Modern Interaction
+
+- **Web Interface**: Clean, responsive UI with real-time analysis progress.
+- **Dual-Mode**:
+  - `Simple`: Quick architect + math check.
+  - `Hierarchical`: Full 5-agent deep dive.
+- **Bilingual**: Generates native-quality English and Chinese reports simultaneously.
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.8+
-- CUDA-compatible GPU (recommended for faster PDF parsing)
-- API key from DeepSeek or OpenAI
+- API Key (DeepSeek or OpenAI)
+- (Optional) CUDA GPU for faster layout analysis
 
 ### Installation
 
@@ -52,159 +82,98 @@ cd paper_reader
 pip install -r requirements.txt
 ```
 
-> **Note**: GPU acceleration is recommended for optimal PDF parsing performance. CPU mode is supported but significantly slower.
-
 ### Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file:
 
-```bash
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
+```env
+DEEPSEEK_API_KEY=sk-your-key
 # OR
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=sk-your-key
 ```
 
-Alternatively, use environment variables:
+### Usage
 
-```bash
-# Windows
-set DEEPSEEK_API_KEY=your_api_key
+#### 1. Web Interface (Recommended)
 
-# Linux/Mac
-export DEEPSEEK_API_KEY=your_api_key
-```
-
-### Running the Application
-
-#### Web Interface (Recommended)
-
-Launch the web server:
+Start the server to enjoy the full interactive experience.
 
 ```bash
 python web_server.py
 ```
 
-Then navigate to `http://localhost:8000` in your browser.
+Open **<http://localhost:8000>** in your browser.
 
-**Web Features:**
-
-- Drag-and-drop PDF upload
-- Real-time analysis progress visualization
-- Side-by-side English/Chinese reports
-- Interactive AI discussion
-- Export to Markdown/PDF/DOCX
-- Searchable analysis history
-
-#### Command Line Interface
+#### 2. Command Line
 
 ```bash
-# Basic usage with DeepSeek
-python main.py path/to/paper.pdf
+# Full hierarchical analysis (Default)
+python main.py papers/attention_is_all_you_need.pdf
 
-# Specify output directory
-python main.py paper.pdf -o ./my_analysis
+# Save intermediate agent outputs
+python main.py paper.pdf --verbose
 
-# Use OpenAI GPT-4
+# Use OpenAI instead of DeepSeek
 python main.py paper.pdf --provider openai --model gpt-4o
-
-# Verbose mode (saves intermediate outputs)
-python main.py paper.pdf -v
 ```
-
-## CLI Arguments
-
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `pdf_path` | Path to PDF file | (required) |
-| `-o, --output` | Output directory | `./output` |
-| `--provider` | LLM provider (`openai`/`deepseek`) | `deepseek` |
-| `--model` | Model name | Auto-selected |
-| `--api-key` | API key | From environment |
-| `--no-gpu` | Disable GPU acceleration | `False` |
-| `--no-images` | Skip image extraction | `False` |
-| `-v, --verbose` | Save intermediate outputs | `False` |
-
-## Output Structure
-
-```
-outputs/
-└── {paper_name}_{timestamp}/
-    ├── paper_analysis.md       # English report
-    ├── paper_analysis_zh.md    # Chinese report
-    ├── figure_index.json       # Figure metadata
-    ├── images/                 # Extracted figures
-    │   ├── Figure_1.png
-    │   ├── Figure_2.png
-    │   └── ...
-    └── specialists/            # Specialist agent reports
-        ├── 01_context_hunter.md
-        ├── 02_math_specialist.md
-        └── 03_data_auditor.md
-```
-
-## Project Structure
-
-```
-paper_reader/
-├── backend/                # FastAPI backend & WebSocket manager
-│   ├── app.py             # Main API endpoints
-│   ├── websocket_manager.py
-│   └── report_store.py    # Report persistence
-├── frontend/              # Vanilla JS/CSS web interface
-│   ├── index.html
-│   └── static/
-│       ├── scripts.js
-│       └── styles.css
-├── agents/                # Multi-agent system
-│   ├── orchestrator.py    # Hierarchical orchestration
-│   ├── architect.py       # Planning agent
-│   ├── specialists/       # Domain-specific agents
-│   └── editor.py          # Report synthesis
-├── parsers/               # PDF processing
-│   └── pdf_parser.py      # Custom parsing algorithm
-├── generators/            # Report generation
-│   └── report_generator.py
-├── main.py                # CLI entry point
-└── web_server.py          # Web server entry point
-```
-
-## Technical Stack
-
-- **Backend**: FastAPI, WebSocket, asyncio
-- **Frontend**: Vanilla JavaScript, Showdown.js (Markdown), KaTeX (LaTeX)
-- **PDF Parsing**: Custom algorithm built on PyMuPDF with intelligent layout analysis
-- **LLM Integration**: DeepSeek API / OpenAI API
-- **Agent Architecture**: Hierarchical multi-agent with role specialization
-- **Storage**: JSON-based persistence for simplicity and portability
-
-## Use Cases
-
-- **Researchers**: Quickly understand new papers in your field
-- **Students**: Deep comprehension of complex academic materials
-- **Literature Review**: Systematic analysis of multiple papers
-- **Paper Writing**: Learn from methodology and experimental design
-
-## Known Issues & Limitations
-
-- PDF parsing quality depends on the original document structure
-- GPU recommended for reasonable parsing speed (CPU mode is slow)
-- LLM API costs can accumulate with large papers
-- Image extraction may miss figures embedded in complex layouts
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details
-
-## Acknowledgments
-
-- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for robust PDF processing capabilities
-- [DeepSeek](https://www.deepseek.com/) for powerful and affordable LLM API
-- All contributors and users of this project
 
 ---
 
-**Star this repo if you find it useful!**
+## 📂 Output Structure
+
+The system organizes outputs to keep your research clean:
+
+```text
+outputs/
+└── {Paper_Title}_{Timestamp}/
+    ├── paper_analysis.md       # 🇬🇧 Final English Report
+    ├── paper_analysis_zh.md    # 🇨🇳 Final Chinese Report
+    ├── images/                 # 🖼️ All extracted figures
+    │   ├── Figure_1.png
+    │   └── ...
+    ├── specialists/            # 🕵️ Intermediate Specialist Reports
+    │   ├── 01_context_hunter.md
+    │   ├── 02_math_specialist.md
+    │   └── 03_data_auditor.md
+    └── figure_index.json       # Metadata
+```
+
+---
+
+## 🛠️ Project Structure
+
+```text
+paper_reader/
+├── agents/                 # 🤖 The Brains
+│   ├── hierarchical_orchestrator.py
+│   ├── hierarchical_prompts.py
+│   └── ...
+├── parsers/                # 👁️ The Eyes
+│   └── pdf_parser.py       # Custom Layout Analysis
+├── generators/             # 📝 The Scribe
+│   └── report_generator.py # Report Assembly
+├── backend/                # 🔌 API Server
+└── frontend/               # 🖥️ Web UI
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Whether it's a new specialist agent, better parsing logic, or UI improvements.
+
+1. Fork the Project
+2. Create your Feature Branch
+3. Commit your Changes
+4. Push to the Branch
+5. Open a Pull Request
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+<div align="center">
+  <b>Star ⭐ this repo if it helped your research!</b>
+</div>
