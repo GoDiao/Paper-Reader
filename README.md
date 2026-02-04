@@ -95,7 +95,7 @@ The system operates using a "Divide and Conquer" strategy orchestrated by a cent
 ### Installation
 
 ```bash
-git clone https://github.com/your-username/paper_reader.git
+git clone https://github.com/GoDiao/Paper-Reader.git
 cd paper_reader
 pip install -r requirements.txt
 ```
