@@ -13,6 +13,7 @@ const state = {
     reportId: null,
     websocket: null,
     reports: { english: '', chinese: '' },
+    specialistReports: {},
     currentLang: 'en'
 };
 
@@ -87,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initExport();
     initChat();
     initHistory();
+    initSpecialistReports();
     loadHistory();
 });
 
@@ -320,6 +322,14 @@ function handleAnalysisComplete(data) {
     renderReport('en', reports.english);
     renderReport('zh', reports.chinese);
 
+    // Render specialist reports if available
+    console.log('[handleAnalysisComplete] metadata:', metadata);
+    console.log('[handleAnalysisComplete] specialist_reports:', metadata.specialist_reports);
+    if (metadata.specialist_reports) {
+        state.specialistReports = metadata.specialist_reports;
+        renderSpecialistReports(metadata.specialist_reports);
+    }
+
     // Show chat section
     elements.chatSection.classList.remove('hidden');
 
@@ -437,6 +447,116 @@ function renderReport(lang, markdown) {
             console.error('KaTeX rendering error:', error);
         }
     }, 100);
+}
+
+
+// ============================================
+// Specialist Reports
+// ============================================
+
+function initSpecialistReports() {
+    const specialistToggle = document.getElementById('specialistToggle');
+    const specialistContent = document.getElementById('specialistContent');
+    const specialistTabBtns = document.querySelectorAll('.specialist-tab-btn');
+
+    // Toggle expand/collapse
+    if (specialistToggle) {
+        specialistToggle.addEventListener('click', () => {
+            specialistToggle.classList.toggle('expanded');
+            specialistContent.classList.toggle('expanded');
+        });
+    }
+
+    // Tab switching
+    specialistTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const specialist = btn.dataset.specialist;
+
+            // Update active tab
+            specialistTabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Show corresponding content
+            document.querySelectorAll('.specialist-report').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.querySelector(`.specialist-report[data-specialist="${specialist}"]`).classList.add('active');
+        });
+    });
+}
+
+function renderSpecialistReports(specialistReports) {
+    console.log('[renderSpecialistReports] called with:', specialistReports);
+    if (!specialistReports || Object.keys(specialistReports).length === 0) {
+        console.log('[renderSpecialistReports] No specialist reports, returning');
+        return; // No specialist reports available
+    }
+
+    const section = document.getElementById('specialistReportsSection');
+    const countBadge = section.querySelector('.specialist-count');
+
+    // Count available reports
+    const count = Object.keys(specialistReports).length;
+    countBadge.textContent = `(${count})`;
+
+    // Render each specialist report
+    Object.entries(specialistReports).forEach(([key, markdown]) => {
+        const container = document.querySelector(`.specialist-report[data-specialist="${key}"]`);
+        if (!container || !markdown) return;
+
+        // CRITICAL: Protect LaTeX from Markdown processor (same as main reports)
+        const mathBlocks = [];
+        let mathIndex = 0;
+
+        // Protect display math: $$...$$
+        markdown = markdown.replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+            mathBlocks.push(match);
+            return `<!--MATH${mathIndex++}-->`;
+        });
+
+        // Protect inline math: $...$
+        markdown = markdown.replace(/\$[^\$\n]+?\$/g, (match) => {
+            mathBlocks.push(match);
+            return `<!--MATH${mathIndex++}-->`;
+        });
+
+        // Convert markdown to HTML
+        let html = converter.makeHtml(markdown);
+
+        // Restore LaTeX blocks from HTML comments
+        html = html.replace(/<!--MATH(\d+)-->/g, (match, index) => {
+            return mathBlocks[parseInt(index)] || match;
+        });
+
+        container.innerHTML = html;
+
+        // Highlight code blocks
+        container.querySelectorAll('pre code').forEach(block => {
+            hljs.highlightElement(block);
+        });
+
+        // Render LaTeX math
+        setTimeout(() => {
+            try {
+                renderMathInElement(container, {
+                    delimiters: [
+                        { left: '$$', right: '$$', display: true },
+                        { left: '$', right: '$', display: false },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    throwOnError: false,
+                    trust: true,
+                    strict: false
+                });
+            } catch (error) {
+                console.error('KaTeX rendering error in specialist report:', error);
+            }
+        }, 100);
+    });
+
+    // Show the section
+    section.classList.remove('hidden');
 }
 
 
@@ -711,6 +831,12 @@ async function loadReport(reportId) {
         elements.reportTitle.innerHTML = `<i class="fas fa-file-alt"></i> ${enData.title || 'Report'}`;
         renderReport('en', state.reports.english);
         renderReport('zh', state.reports.chinese);
+
+        // Render specialist reports if available
+        if (enData.specialist_reports) {
+            state.specialistReports = enData.specialist_reports;
+            renderSpecialistReports(enData.specialist_reports);
+        }
 
         // Load chat history
         await loadChatHistory(reportId);

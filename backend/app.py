@@ -34,6 +34,7 @@ from backend.websocket_manager import WebSocketManager, ProgressCallback
 from backend.report_store import ReportStore
 from backend.chat import ChatAgent
 from backend.export import write_md_to_pdf, write_md_to_word, create_images_zip
+from backend.websocket_manager import ProgressCallback
 
 from parsers.pdf_parser import PDFParser
 from agents.hierarchical_orchestrator import HierarchicalOrchestrator
@@ -252,9 +253,12 @@ async def run_analysis(
                 verbose=verbose
             )
             
+            # Create progress callback for real-time updates
+            loop = asyncio.get_event_loop()
+            progress_callback = ProgressCallback(ws_manager, session_id, loop)
+            
             # Run analysis in thread pool to avoid blocking event loop
             import concurrent.futures
-            loop = asyncio.get_event_loop()
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 # Use lambda to call with keyword arguments (executor doesn't support kwargs directly)
                 analysis = await loop.run_in_executor(
@@ -263,7 +267,8 @@ async def run_analysis(
                         content=parsed_doc.markdown_content,
                         title=parsed_doc.title,
                         images=parsed_doc.images,
-                        figure_index_path=figure_index_path if figure_index_path.exists() else None
+                        figure_index_path=figure_index_path if figure_index_path.exists() else None,
+                        progress_callback=progress_callback
                     )
                 )
             
@@ -308,21 +313,26 @@ async def run_analysis(
             specialists_dir = output_dir / "specialists"
             specialists_dir.mkdir(exist_ok=True)
             
+            # Prepare specialist reports for storage
+            specialist_reports = {}
+            
             if analysis.context_report:
+                context_content = f"# Context Hunter Report\n\n**Domain**: {domain}\n\n{analysis.context_report}"
                 with open(specialists_dir / "01_context_hunter.md", "w", encoding="utf-8") as f:
-                    f.write(f"# Context Hunter Report\n\n")
-                    f.write(f"**Domain**: {domain}\n\n")
-                    f.write(analysis.context_report)
+                    f.write(context_content)
+                specialist_reports["context_hunter"] = context_content
             
             if analysis.math_report:
+                math_content = f"# Math Specialist Report\n\n{analysis.math_report}"
                 with open(specialists_dir / "02_math_specialist.md", "w", encoding="utf-8") as f:
-                    f.write(f"# Math Specialist Report\n\n")
-                    f.write(analysis.math_report)
+                    f.write(math_content)
+                specialist_reports["math_specialist"] = math_content
             
             if analysis.experiment_report:
+                data_content = f"# Data Auditor Report\n\n{analysis.experiment_report}"
                 with open(specialists_dir / "03_data_auditor.md", "w", encoding="utf-8") as f:
-                    f.write(f"# Data Auditor Report\n\n")
-                    f.write(analysis.experiment_report)
+                    f.write(data_content)
+                specialist_reports["data_auditor"] = data_content
             
             logger.info(f"Saved specialist reports to {specialists_dir}")
 
@@ -375,7 +385,8 @@ async def run_analysis(
             metadata={
                 "upload_id": upload_id,
                 "domain": domain,
-                "figure_suggestions": figure_suggestions
+                "figure_suggestions": figure_suggestions,
+                "specialist_reports": specialist_reports
             }
         )
         
@@ -389,7 +400,8 @@ async def run_analysis(
                 "report_id": report_id,
                 "title": parsed_doc.title,
                 "domain": domain,
-                "output_dir": str(output_dir)
+                "output_dir": str(output_dir),
+                "specialist_reports": specialist_reports
             }
         )
         
@@ -446,10 +458,33 @@ async def get_report(report_id: str, lang: str = "en"):
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
+    # Get specialist reports from database or fallback to disk
+    specialist_reports = report.get("specialist_reports", {})
+    
+    # Fallback: if no specialist reports in DB, try loading from disk
+    if not specialist_reports:
+        upload_id = report["metadata"].get("upload_id", report["id"])
+        specialists_dir = Path("outputs") / upload_id / "specialists"
+        if specialists_dir.exists():
+            specialist_files = {
+                "context_hunter": "01_context_hunter.md",
+                "math_specialist": "02_math_specialist.md",
+                "data_auditor": "03_data_auditor.md"
+            }
+            for key, filename in specialist_files.items():
+                filepath = specialists_dir / filename
+                if filepath.exists():
+                    try:
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            specialist_reports[key] = f.read()
+                    except Exception as e:
+                        logger.warning(f"Failed to read specialist report {filepath}: {e}")
+    
     return {
         "id": report["id"],
         "title": report["title"],
         "report": report["report_en"] if lang == "en" else report["report_zh"],
+        "specialist_reports": specialist_reports,
         "metadata": report["metadata"],
         "upload_id": report["metadata"].get("upload_id", report["id"]),  # Include upload_id for image paths
         "created_at": report["created_at"]

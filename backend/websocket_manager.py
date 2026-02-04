@@ -133,23 +133,14 @@ class ProgressCallback:
     Callback wrapper for the orchestrator to emit WebSocket progress events.
     
     Usage:
-        callback = ProgressCallback(ws_manager, session_id)
+        callback = ProgressCallback(ws_manager, session_id, asyncio.get_event_loop())
         orchestrator.analyze_paper(..., progress_callback=callback)
     """
     
-    def __init__(self, manager: WebSocketManager, session_id: str):
+    def __init__(self, manager: WebSocketManager, session_id: str, loop: asyncio.AbstractEventLoop = None):
         self.manager = manager
         self.session_id = session_id
-        self._loop = None
-    
-    def _get_loop(self):
-        """Get or create event loop for sync->async bridging."""
-        if self._loop is None:
-            try:
-                self._loop = asyncio.get_running_loop()
-            except RuntimeError:
-                self._loop = asyncio.new_event_loop()
-        return self._loop
+        self._loop = loop
     
     def emit(
         self,
@@ -160,18 +151,26 @@ class ProgressCallback:
         progress: int = 0,
         data: Dict = None
     ):
-        """Emit progress event (sync wrapper for async send)."""
-        asyncio.create_task(
-            self.manager.send_progress(
-                self.session_id,
-                ProgressPhase(phase),
-                agent,
-                ProgressStatus(status),
-                message,
-                progress,
-                data
-            )
+        """Emit progress event (thread-safe wrapper for async send)."""
+        if self._loop is None:
+            return
+        
+        # Create coroutine
+        coro = self.manager.send_progress(
+            self.session_id,
+            phase,  # Use as string directly
+            agent,
+            status,  # Use as string directly
+            message,
+            progress,
+            data
         )
+        
+        # Schedule on the main event loop (thread-safe)
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except Exception as e:
+            logger.warning(f"Failed to emit progress: {e}")
     
     def parsing_started(self, message: str = "Starting PDF parsing..."):
         self.emit("parsing", "pdf_parser", "started", message, 0)

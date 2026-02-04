@@ -237,6 +237,36 @@
                     </button>
                 </div>
                 
+                <!-- Specialist Reports Section -->
+                <div id="specialistReportsSection" class="specialist-reports-section hidden">
+                    <div class="specialist-header" id="specialistToggle">
+                        <div class="specialist-title">
+                            <i class="fas fa-users"></i>
+                            <span>专家分析报告</span>
+                            <span class="specialist-count"></span>
+                        </div>
+                        <i class="fas fa-chevron-down specialist-chevron"></i>
+                    </div>
+                    <div class="specialist-content" id="specialistContent">
+                        <div class="specialist-tabs">
+                            <button class="specialist-tab-btn active" data-specialist="context_hunter">
+                                <i class="fas fa-search"></i> Context Hunter
+                            </button>
+                            <button class="specialist-tab-btn" data-specialist="math_specialist">
+                                <i class="fas fa-square-root-alt"></i> Math Specialist
+                            </button>
+                            <button class="specialist-tab-btn" data-specialist="data_auditor">
+                                <i class="fas fa-chart-bar"></i> Data Auditor
+                            </button>
+                        </div>
+                        <div class="specialist-report-content">
+                            <div class="specialist-report active" data-specialist="context_hunter"></div>
+                            <div class="specialist-report" data-specialist="math_specialist"></div>
+                            <div class="specialist-report" data-specialist="data_auditor"></div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Report Content -->
                 <div id="reportContent" class="report-content">
                     <div class="report-lang active" data-lang="en"></div>
@@ -299,6 +329,6 @@
         </div>
     </div>
 
-    <script src="/static/scripts.js?v=5"></script>
+    <script src="/static/scripts.js?v=7"></script>
 </body>
 </html>

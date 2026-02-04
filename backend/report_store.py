@@ -69,6 +69,7 @@ class ReportStore:
             "pdf_path": pdf_path,
             "report_en": report_en,
             "report_zh": report_zh,
+            "specialist_reports": metadata.get("specialist_reports", {}) if metadata else {},
             "chat_messages": [],
             "metadata": metadata or {},
             "created_at": timestamp,

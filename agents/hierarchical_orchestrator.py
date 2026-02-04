@@ -135,7 +135,8 @@ class HierarchicalOrchestrator:
         abstract: str = "",
         total_pages: int = 0,
         images: List[Any] = None,
-        figure_index_path: Optional[Path] = None  # NEW: Path to figure_index.json
+        figure_index_path: Optional[Path] = None,  # NEW: Path to figure_index.json
+        progress_callback = None  # NEW: Callback for progress updates
     ) -> HierarchicalAnalysisResult:
         """
         Execute the complete hierarchical analysis pipeline.
@@ -148,6 +149,7 @@ class HierarchicalOrchestrator:
             total_pages: Total page count
             images: List of extracted images
             figure_index_path: Path to figure_index.json for detailed figure info
+            progress_callback: Optional callback for WebSocket progress updates
             
         Returns:
             HierarchicalAnalysisResult with complete analysis
@@ -164,6 +166,10 @@ class HierarchicalOrchestrator:
         
         console.print("\n[bold]═══ Phase 1: Architect Planning ═══[/bold]")
         
+        # Emit progress: Architect started
+        if progress_callback:
+            progress_callback.architect_started()
+        
         # Step 1: Architect creates reading plan
         result.reading_plan = self._run_architect(
             title=title,
@@ -176,7 +182,17 @@ class HierarchicalOrchestrator:
         console.print(f"[green]✓[/green] Domain identified: {result.domain}")
         console.print(f"[green]✓[/green] Reading plan created")
         
+        # Emit progress: Architect completed
+        if progress_callback:
+            progress_callback.architect_completed(result.domain)
+        
         console.print("\n[bold]═══ Phase 2: Specialist Analysis (Parallel) ═══[/bold]")
+        
+        # Emit progress: Specialists started
+        if progress_callback:
+            progress_callback.specialist_started("context_hunter")
+            progress_callback.specialist_started("math_specialist")
+            progress_callback.specialist_started("data_auditor")
         
         # Step 2: Run specialists in parallel
         specialist_reports = self._run_specialists_parallel(
@@ -188,7 +204,18 @@ class HierarchicalOrchestrator:
         result.math_report = specialist_reports.get("math_specialist", "")
         result.experiment_report = specialist_reports.get("data_auditor", "")
         
+        # Emit progress: Specialists completed
+        if progress_callback:
+            progress_callback.specialist_completed("context_hunter")
+            progress_callback.specialist_completed("math_specialist")
+            progress_callback.specialist_completed("data_auditor")
+        
         console.print("\n[bold]═══ Phase 3: Editor Assembly (Parallel EN/ZH) ═══[/bold]")
+        
+        # Emit progress: Editors started
+        if progress_callback:
+            progress_callback.editor_started("english")
+            progress_callback.editor_started("chinese")
         
         # Step 3: Editors assemble final reports in parallel
         # Load figure index for detailed figure information
@@ -208,6 +235,11 @@ class HierarchicalOrchestrator:
         
         # Extract figure suggestions from English report
         result.figure_suggestions = self._extract_figure_suggestions(result.final_report)
+        
+        # Emit progress: Editors completed
+        if progress_callback:
+            progress_callback.editor_completed("english", len(result.final_report))
+            progress_callback.editor_completed("chinese", len(result.final_report_chinese))
         
         console.print(f"[green]✓[/green] English report assembled ({len(result.final_report):,} chars)")
         console.print(f"[green]✓[/green] Chinese report assembled ({len(result.final_report_chinese):,} chars)")
