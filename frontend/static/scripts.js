@@ -428,6 +428,7 @@ function startAnalysis() {
     analysisSection.classList.remove('hidden');
 
     // Connect WebSocket
+    state.specialistReports = {}; // Reset reports
     connectWebSocket();
 }
 
@@ -479,6 +480,196 @@ function handleWebSocketMessage(data) {
         case 'error':
             handleAnalysisError(data);
             break;
+        case 'stream':
+            handleStreamMessage(data);
+            break;
+        case 'architect_plan':
+            handleArchitectPlan(data);
+            break;
+    }
+}
+
+function handleArchitectPlan(data) {
+    const { plan } = data;
+    if (!plan) return;
+
+    // Show specialist section if hidden
+    const section = document.getElementById('specialistReportsSection');
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
+        const content = document.getElementById('specialistContent');
+        const toggle = document.getElementById('specialistToggle');
+        content.classList.add('expanded');
+        toggle.classList.add('expanded');
+    }
+
+    // Format plan as Markdown
+    const markdown = formatArchitectPlan(plan);
+    state.specialistReports['architect'] = markdown;
+
+    // Render
+    renderSingleSpecialistReport('architect', markdown);
+
+    // Switch to architect tab
+    const tabBtn = document.querySelector(`.specialist-tab-btn[data-specialist="architect"]`);
+    if (tabBtn) tabBtn.click();
+}
+
+function formatArchitectPlan(plan) {
+    let md = `### 📋 Research Plan\n\n`;
+    md += `**Domain**: ${plan.domain}\n\n`;
+    md += `**Summary**: ${plan.paper_summary}\n\n`;
+    md += `---\n\n`;
+    md += `### 🕵️ Agent Assignments\n\n`;
+
+    // Context Hunter
+    if (plan.context_hunter_task) {
+        md += `#### 🔍 Context Hunter\n`;
+        md += `- **Focus**: Background, Related Work, Motivation\n`;
+        if (plan.context_hunter_task.sections) {
+            md += `- **Sections**: ${plan.context_hunter_task.sections.join(', ')}\n`;
+        }
+        md += `\n`;
+    }
+
+    // Math Specialist
+    if (plan.math_specialist_task) {
+        md += `#### 🔢 Math Specialist\n`;
+        md += `- **Focus**: Methodology, Algorithms, Equations\n`;
+        if (plan.math_specialist_task.sections) {
+            md += `- **Sections**: ${plan.math_specialist_task.sections.join(', ')}\n`;
+        }
+        md += `\n`;
+    }
+
+    // Data Auditor
+    if (plan.data_auditor_task) {
+        md += `#### 📊 Data Auditor\n`;
+        md += `- **Focus**: Experiments, Results, Metrics\n`;
+        if (plan.data_auditor_task.sections) {
+            md += `- **Sections**: ${plan.data_auditor_task.sections.join(', ')}\n`;
+        }
+        md += `\n`;
+    }
+
+    return md;
+}
+
+function handleStreamMessage(data) {
+    const { agent, token } = data;
+
+    // Only handle specialist agents
+    const validAgents = ['context_hunter', 'math_specialist', 'data_auditor'];
+    if (!validAgents.includes(agent)) return;
+
+    // Show specialist section if hidden
+    const section = document.getElementById('specialistReportsSection');
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
+        // Ensure content is visible (auto-expand)
+        const content = document.getElementById('specialistContent');
+        const toggle = document.getElementById('specialistToggle');
+        if (!content.classList.contains('expanded')) {
+            content.classList.add('expanded');
+            toggle.classList.add('expanded');
+        }
+    }
+
+    // Switch tab to the active agent if it's the first token or user hasn't manually switched?
+    // For now, let's NOT auto-switch tabs to avoid annoying the user if they are reading another one.
+    // However, if we are just starting, maybe we should? 
+    // Let's at least ensure the container exists.
+
+    const container = document.querySelector(`.specialist-report[data-specialist="${agent}"]`);
+    if (!container) return;
+
+    // Buffer content
+    if (!state.specialistReports[agent]) {
+        state.specialistReports[agent] = '';
+    }
+    state.specialistReports[agent] += token;
+
+    // Render (throttled/managed)
+    // For streaming efficiency, we might just append text node if it's simple text, 
+    // but Markdown needs parsing. 
+    // Full re-render on every token is expensive. 
+    // Lets try simple text append for now, or throttled markdown render.
+    // For this implementation, let's settle for simple re-render every X tokens or use a throttle function.
+    // Given the complexity, let's just re-render. Modern browsers are fast enough for small docs.
+    // If it lags, we can optimize.
+
+    requestAnimationFrame(() => {
+        renderSingleSpecialistReport(agent, state.specialistReports[agent]);
+    });
+}
+
+function renderSingleSpecialistReport(agent, markdown) {
+    const container = document.querySelector(`.specialist-report[data-specialist="${agent}"]`);
+    if (!container) return;
+
+    // Fix table formatting (ensure newline before table) same as final report
+    markdown = markdown.replace(/\r\n/g, '\n');
+    // Ensure blank line before tables
+    markdown = markdown.replace(/([^\n])\n(\|.*\|[ \t]*\n\|[-:| ]+\|)/g, '$1\n\n$2');
+
+    // CRITICAL: Protect LaTeX from Markdown processor
+    // Use HTML comments as placeholders
+    const mathBlocks = [];
+    let mathIndex = 0;
+
+    // Protect display math: $$...$$
+    markdown = markdown.replace(/\$\$[\s\S]*?\$\$/g, (match) => {
+        mathBlocks.push(match);
+        return `<!--MATH${mathIndex++}-->`;
+    });
+
+    // Protect display math: \[...\]
+    markdown = markdown.replace(/\\\[[\s\S]*?\\\]/g, (match) => {
+        mathBlocks.push(match);
+        return `<!--MATH${mathIndex++}-->`;
+    });
+
+    // Protect inline math: $...$
+    // Be careful with single $ matching normal text.
+    // We strictly match $...$ where ... contains no $ and no newlines (for inline)
+    markdown = markdown.replace(/\$[^\$\n]+?\$/g, (match) => {
+        mathBlocks.push(match);
+        return `<!--MATH${mathIndex++}-->`;
+    });
+
+    // Protect inline math: \(...\)
+    markdown = markdown.replace(/\\\([\s\S]*?\\\)/g, (match) => {
+        mathBlocks.push(match);
+        return `<!--MATH${mathIndex++}-->`;
+    });
+
+    // Basic Markdown to HTML
+    let html = converter.makeHtml(markdown);
+
+    // Restore LaTeX blocks from HTML comments
+    html = html.replace(/<!--MATH(\d+)-->/g, (match, index) => {
+        return mathBlocks[parseInt(index)] || match;
+    });
+
+    container.innerHTML = html;
+
+    // Render LaTeX math
+    // We do this on every frame update, which is heavy, but necessary for streaming math.
+    // KaTeX is relatively fast.
+    try {
+        renderMathInElement(container, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false,
+            trust: true,
+            strict: false
+        });
+    } catch (error) {
+        // Suppress errors during partial rendering
     }
 }
 
@@ -514,6 +705,18 @@ function updateProgress(data) {
         case 'error':
             stepElement.classList.add('error');
             break;
+    }
+
+    // Auto-show specialist section when analysis starts
+    if (phase === 'analysis' && status === 'started') {
+        const section = document.getElementById('specialistReportsSection');
+        if (section.classList.contains('hidden')) {
+            section.classList.remove('hidden');
+            const content = document.getElementById('specialistContent');
+            const toggle = document.getElementById('specialistToggle');
+            content.classList.add('expanded');
+            toggle.classList.add('expanded');
+        }
     }
 }
 
@@ -641,8 +844,20 @@ function renderReport(lang, markdown) {
         return `<!--MATH${mathIndex++}-->`;
     });
 
+    // Protect display math: \[...\]
+    markdown = markdown.replace(/\\\[[\s\S]*?\\\]/g, (match) => {
+        mathBlocks.push(match);
+        return `<!--MATH${mathIndex++}-->`;
+    });
+
     // Protect inline math: $...$
     markdown = markdown.replace(/\$[^\$\n]+?\$/g, (match) => {
+        mathBlocks.push(match);
+        return `<!--MATH${mathIndex++}-->`;
+    });
+
+    // Protect inline math: \(...\)
+    markdown = markdown.replace(/\\\([\s\S]*?\\\)/g, (match) => {
         mathBlocks.push(match);
         return `<!--MATH${mathIndex++}-->`;
     });

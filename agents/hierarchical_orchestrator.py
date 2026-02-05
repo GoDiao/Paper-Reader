@@ -189,6 +189,8 @@ class HierarchicalOrchestrator:
         # Emit progress: Architect completed
         if progress_callback:
             progress_callback.architect_completed(result.domain)
+            if hasattr(progress_callback, 'report_architect_plan'):
+                 progress_callback.report_architect_plan(result.reading_plan)
         
         console.print("\n[bold]═══ Phase 2: Specialist Analysis (Parallel) ═══[/bold]")
         
@@ -265,7 +267,8 @@ class HierarchicalOrchestrator:
         max_tokens: Optional[int] = None,
         agent_name: str = "LLM",
         agent_key: Optional[str] = None,
-        phase: str = "analysis"
+        phase: str = "analysis",
+        stream: bool = False
     ) -> str:
         """
         Make an LLM API call using unified factory with progress callbacks.
@@ -310,7 +313,8 @@ class HierarchicalOrchestrator:
             progress_callback=self.progress_callback,
             agent_name=agent_name,
             phase=phase,
-            agent_key=agent_key
+            agent_key=agent_key,
+            stream=stream
         )
         
         # Verbose logging: show partial output
@@ -503,7 +507,8 @@ class HierarchicalOrchestrator:
                         None,  # max_tokens (use default)
                         name,  # agent_name for verbose logging
                         name,  # agent_key (matches frontend data-agent)
-                        "analysis"  # phase
+                        "analysis",  # phase
+                        True  # stream
                     )
                     futures[future] = name
                 

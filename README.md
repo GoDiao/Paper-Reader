@@ -185,6 +185,10 @@ paper_reader/
 - **⚡ Concurrency Optimization**: Eliminated nested thread pools, unified executor management, and improved resource utilization for better performance under concurrent loads.
 - **📄 Enhanced PDF Parser**: Improved PyMuPDF implementation with table extraction (Markdown format), mathematical formula region detection, better text structure preservation, and smarter image caption detection (searches above/below images).
 - **🔧 Configuration**: New environment variables (`LLM_TIMEOUT_S`, `LLM_MAX_RETRIES`, `LLM_MAX_CONCURRENCY`) for fine-tuning API behavior.
+- **📡 Real-time Streaming**: Implemented streaming responses for expert agents (Math, Data, Context), allowing users to see reports generating token-by-token.
+- **📐 Math Formula Fix**: Solved critical rendering issues for streamed LaTeX formulas by protecting delimiters (`\[...\]`, `\(...\)`) from Markdown processing.
+- **🏗️ Architect Report**: Added a new dedicated "Architect" tab to visualize the reading plan and agent assignments immediately after the planning phase.
+- **🖥️ UI UX Improvements**: Moved Specialist Reports to the main view for better visibility and added auto-focus logic to follow the active agent.
 
 ### v1.1.0 - Premium UI & Chat Upgrade
 

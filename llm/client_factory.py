@@ -72,7 +72,8 @@ def chat_completions_create(
     progress_callback: Optional[Any] = None,
     agent_name: str = "LLM",
     phase: str = "analysis",
-    agent_key: str = "llm"
+    agent_key: str = "llm",
+    **kwargs
 ) -> str:
     """
     Unified chat completions call with retry/backoff and optional progress callbacks.
@@ -128,15 +129,33 @@ def chat_completions_create(
             
             try:
                 # Make API call
+                # Check if we should stream (passed in kwargs or default false, checking here just in case, but we need to add stream param to function first)
+                # Actually, we'll modify the function signature to accept `stream` param or just use kwargs.
+                # Let's check signature again. We need to add `stream` parameter.
+                
+                is_stream = kwargs.get("stream", False)
+                
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    timeout=timeout
+                    timeout=timeout,
+                    stream=is_stream
                 )
                 
-                result = response.choices[0].message.content
+                if is_stream:
+                    chunks = []
+                    for chunk in response:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            content = chunk.choices[0].delta.content
+                            chunks.append(content)
+                            if progress_callback:
+                                progress_callback.stream_token(agent_key, content)
+                    
+                    result = "".join(chunks)
+                else:
+                    result = response.choices[0].message.content
                 
                 # Emit progress: success
                 if progress_callback:
@@ -244,7 +263,8 @@ class LLMClientFactory:
         progress_callback: Optional[Any] = None,
         agent_name: str = "LLM",
         phase: str = "analysis",
-        agent_key: str = "llm"
+        agent_key: str = "llm",
+        **kwargs
     ) -> str:
         """
         Make a chat completions call using factory configuration.
@@ -278,5 +298,6 @@ class LLMClientFactory:
             progress_callback=progress_callback,
             agent_name=agent_name,
             phase=phase,
-            agent_key=agent_key
+            agent_key=agent_key,
+            **kwargs
         )

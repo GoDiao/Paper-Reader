@@ -115,6 +115,34 @@ class WebSocketManager:
         }
         await self._send_to_session(session_id, json.dumps(event))
     
+    async def send_stream(
+        self,
+        session_id: str,
+        agent: str, # agent key
+        token: str
+    ):
+        """Send a stream token to a specific session."""
+        event = {
+            "type": "stream",
+            "agent": agent,
+            "token": token
+        }
+        # Use send_to_session directly for raw JSON speed if needed, 
+        # but here we stick to standard structure
+        await self._send_to_session(session_id, json.dumps(event))
+
+    async def send_architect_plan(
+        self,
+        session_id: str,
+        plan: Dict[str, Any]
+    ):
+        """Send architect plan."""
+        event = {
+            "type": "architect_plan",
+            "plan": plan
+        }
+        await self._send_to_session(session_id, json.dumps(event))
+
     async def _send_to_session(self, session_id: str, message: str):
         """Send message to a specific session."""
         async with self._lock:
@@ -171,6 +199,34 @@ class ProgressCallback:
             asyncio.run_coroutine_threadsafe(coro, self._loop)
         except Exception as e:
             logger.warning(f"Failed to emit progress: {e}")
+
+    def stream_token(self, agent: str, token: str):
+        """Emit a stream token (thread-safe)."""
+        if self._loop is None:
+            return
+
+        coro = self.manager.send_stream(self.session_id, agent, token)
+        
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except Exception as e:
+            # Silent fail for stream to not flood logs
+            pass
+            
+    def report_architect_plan(self, plan: Any):
+        """Emit architect plan (thread-safe)."""
+        if self._loop is None:
+            return
+        
+        # Convert ReadingPlan object to dict if needed
+        plan_dict = asdict(plan) if hasattr(plan, '__dataclass_fields__') else plan
+            
+        coro = self.manager.send_architect_plan(self.session_id, plan_dict)
+        
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except Exception as e:
+             logger.warning(f"Failed to emit architect plan: {e}")
     
     def parsing_started(self, message: str = "Starting PDF parsing..."):
         self.emit("parsing", "pdf_parser", "started", message, 0)
