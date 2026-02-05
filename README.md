@@ -178,6 +178,14 @@ paper_reader/
 
 ## 🚀 Changelog
 
+### v1.2.0 - Architecture & Performance Improvements
+
+- **🔧 Unified LLM Client Factory**: Centralized LLM configuration, retry/backoff, and timeout handling across all agents. Added optional global concurrency limiting to prevent API rate limits.
+- **📊 Fine-grained Progress Events**: Real-time progress updates for each agent (Architect, Context Hunter, Math Specialist, Data Auditor, Editors) with detailed status messages during LLM calls and retries.
+- **⚡ Concurrency Optimization**: Eliminated nested thread pools, unified executor management, and improved resource utilization for better performance under concurrent loads.
+- **📄 Enhanced PDF Parser**: Improved PyMuPDF implementation with table extraction (Markdown format), mathematical formula region detection, better text structure preservation, and smarter image caption detection (searches above/below images).
+- **🔧 Configuration**: New environment variables (`LLM_TIMEOUT_S`, `LLM_MAX_RETRIES`, `LLM_MAX_CONCURRENCY`) for fine-tuning API behavior.
+
 ### v1.1.0 - Premium UI & Chat Upgrade
 
 - **✨ New UI**: Introduced a "Deep Space" glassmorphism theme for a premium reading experience.

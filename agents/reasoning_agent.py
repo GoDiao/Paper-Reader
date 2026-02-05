@@ -11,9 +11,11 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
-from openai import OpenAI
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
+from config import LLMConfig
+from llm import LLMClientFactory
 
 from .prompts import (
     ARCHITECT_PROMPT,
@@ -64,41 +66,29 @@ class ReasoningAgent:
         Initialize the reasoning agent.
         
         Args:
-            provider: API provider ("openai" or "deepseek")
+            provider: API provider ("openai", "deepseek", or "siliconflow")
             model: Model name to use
             api_key: API key (or from environment)
             base_url: Custom API base URL
             temperature: Sampling temperature
             max_tokens: Maximum response tokens
         """
+        # Create LLM config
+        llm_config = LLMConfig(
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
+        # Create factory for unified client management
+        self.factory = LLMClientFactory(llm_config)
         self.provider = provider
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        
-        # Set up API client
-        import os
-        
-        if api_key is None:
-            if provider == "deepseek":
-                api_key = os.getenv("DEEPSEEK_API_KEY")
-            else:
-                api_key = os.getenv("OPENAI_API_KEY")
-        
-        if not api_key:
-            raise ValueError(
-                f"No API key found. Set {provider.upper()}_API_KEY "
-                "environment variable or pass api_key parameter."
-            )
-        
-        # Set base URL
-        if base_url is None and provider == "deepseek":
-            base_url = "https://api.deepseek.com"
-        
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
         
         console.print(
             f"[green]✓[/green] Initialized {provider} client "
@@ -181,18 +171,13 @@ class ReasoningAgent:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> str:
-        """Make an LLM API call"""
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature or self.temperature,
-                max_tokens=max_tokens or self.max_tokens,
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            console.print(f"[red]API Error:[/red] {e}")
-            raise
+        """Make an LLM API call using unified factory"""
+        return self.factory.chat_completions(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            agent_name="ReasoningAgent"
+        )
     
     def _detect_domain(self, excerpt: str) -> str:
         """Detect the research domain of the paper"""

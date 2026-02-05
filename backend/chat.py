@@ -7,7 +7,9 @@ Allows users to chat with the AI about analyzed papers.
 import os
 import logging
 from typing import List, Dict, Tuple, Optional
-from openai import OpenAI
+
+from config import LLMConfig
+from llm import LLMClientFactory
 
 logger = logging.getLogger(__name__)
 
@@ -47,25 +49,15 @@ class ChatAgent:
         self.provider = provider
         self.model = model
         
-        # Set up API client
-        if api_key is None:
-            if provider == "deepseek":
-                api_key = os.getenv("DEEPSEEK_API_KEY")
-            elif provider == "siliconflow":
-                api_key = os.getenv("SILICONFLOW_API_KEY")
-            else:
-                api_key = os.getenv("OPENAI_API_KEY")
+        # Create LLM config and factory
+        llm_config = LLMConfig(
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            base_url=base_url
+        )
         
-        if not api_key:
-            raise ValueError(f"No API key found for {provider}")
-        
-        if base_url is None:
-            if provider == "deepseek":
-                base_url = "https://api.deepseek.com"
-            elif provider == "siliconflow":
-                base_url = "https://api.siliconflow.com/v1"
-        
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.factory = LLMClientFactory(llm_config)
     
     async def summarize_history(
         self,
@@ -95,13 +87,12 @@ Recent Messages:
         summary_prompt += "\n\nNew Summary:"
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            return self.factory.chat_completions(
                 messages=[{"role": "user", "content": summary_prompt}],
                 max_tokens=1000,
-                temperature=0.5
-            )
-            return response.choices[0].message.content.strip()
+                temperature=0.5,
+                agent_name="ChatSummarizer"
+            ).strip()
         except Exception as e:
             logger.error(f"Summarization error: {e}")
             return current_summary
@@ -135,20 +126,21 @@ Recent Messages:
             })
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # Note: factory doesn't return usage metadata, so we'll create a basic one
+            # For full metadata, we'd need to extend the factory or call client directly
+            content = self.factory.chat_completions(
                 messages=api_messages,
                 max_tokens=max_tokens,
-                temperature=0.7
+                temperature=0.7,
+                agent_name="ChatAgent"
             )
             
-            content = response.choices[0].message.content
             metadata = {
                 "model": self.model,
                 "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens
+                    "prompt_tokens": 0,  # Not available from factory wrapper
+                    "completion_tokens": 0,
+                    "total_tokens": 0
                 }
             }
             
@@ -186,7 +178,9 @@ Recent Messages:
             })
         
         try:
-            response = self.client.chat.completions.create(
+            # For streaming, we need to use the client directly
+            # Factory doesn't support streaming yet, so use client
+            response = self.factory.client.chat.completions.create(
                 model=self.model,
                 messages=api_messages,
                 max_tokens=max_tokens,

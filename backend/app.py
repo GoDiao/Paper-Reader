@@ -218,8 +218,9 @@ async def run_analysis(
         images_dir = output_dir / "images"
         images_dir.mkdir(exist_ok=True)
         
-        # Create progress callback
-        callback = ProgressCallback(ws_manager, session_id)
+        # Create progress callback for orchestrator (with event loop for thread-safe emits)
+        loop = asyncio.get_event_loop()
+        progress_callback = ProgressCallback(ws_manager, session_id, loop)
         
         # ===== Phase 1: Parse PDF =====
         await ws_manager.send_progress(
@@ -261,55 +262,19 @@ async def run_analysis(
                 verbose=verbose
             )
             
-            # Create progress callback for real-time updates
-            loop = asyncio.get_event_loop()
-            progress_callback = ProgressCallback(ws_manager, session_id, loop)
-            
-            # Run analysis in thread pool to avoid blocking event loop
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                # Use lambda to call with keyword arguments (executor doesn't support kwargs directly)
-                analysis = await loop.run_in_executor(
-                    pool,
-                    lambda: orchestrator.analyze_paper(
-                        content=parsed_doc.markdown_content,
-                        title=parsed_doc.title,
-                        images=parsed_doc.images,
-                        figure_index_path=figure_index_path if figure_index_path.exists() else None,
-                        progress_callback=progress_callback
-                    )
-                )
-            
-            # Send progress updates for completed phases
-            # Architect completed
-            await ws_manager.send_progress(
-                session_id, "analysis", "architect", "completed",
-                f"Domain: {analysis.domain}", 100
+            # Run analysis using asyncio.to_thread (no need for separate ThreadPoolExecutor)
+            # Orchestrator handles its own internal parallelism
+            analysis = await asyncio.to_thread(
+                orchestrator.analyze_paper,
+                content=parsed_doc.markdown_content,
+                title=parsed_doc.title,
+                images=parsed_doc.images,
+                figure_index_path=figure_index_path if figure_index_path.exists() else None,
+                progress_callback=progress_callback
             )
             
-            # Specialists completed (they ran during analyze_paper)
-            await ws_manager.send_progress(
-                session_id, "analysis", "context_hunter", "completed",
-                "Background analysis complete", 100
-            )
-            await ws_manager.send_progress(
-                session_id, "analysis", "math_specialist", "completed",
-                "Mathematical analysis complete", 100
-            )
-            await ws_manager.send_progress(
-                session_id, "analysis", "data_auditor", "completed",
-                "Experimental analysis complete", 100
-            )
-            
-            # Editors completed
-            await ws_manager.send_progress(
-                session_id, "assembly", "editor_english", "completed",
-                f"English report: {len(analysis.final_report):,} chars", 100
-            )
-            await ws_manager.send_progress(
-                session_id, "assembly", "editor_chinese", "completed",
-                f"Chinese report: {len(analysis.final_report_chinese):,} chars", 100
-            )
+            # Note: Progress events are now emitted by orchestrator via progress_callback
+            # No need to manually send completed events here - they're handled internally
             
             
             report_en = analysis.final_report

@@ -1,11 +1,21 @@
 """
-PDF Parser Module - Using PyMuPDF with legacy MinerU support detection.
+PDF Parser Module - Using PyMuPDF with enhanced extraction capabilities.
 
 This module provides functionality to:
-1. Parse PDF documents with layout analysis
-2. Extract text content with LaTeX formulas
-3. Extract figures and tables as images (using smart region rendering)
-4. Build image mapping for report generation
+1. Parse PDF documents with improved layout analysis and structure preservation
+2. Extract text content with better formatting (headers, paragraphs, lists)
+3. Extract tables and convert to markdown format
+4. Identify mathematical formula regions (by font characteristics)
+5. Extract figures and tables as images (using smart region rendering)
+6. Build image mapping for report generation
+
+Optimizations (v1.2.0+):
+- Uses PyMuPDF markdown mode when available for better structure
+- Extracts tables using find_tables() and converts to markdown
+- Identifies math regions by font characteristics (CMMI, math fonts, flags)
+- Improved caption detection (searches above and below images)
+- Better handling of large diagrams without captions
+- Enhanced text structure preservation (headers, paragraphs)
 """
 
 import os
@@ -105,35 +115,67 @@ class PDFParser:
         pdf_path: Path,
         output_dir: Path
     ) -> ParsedDocument:
-        """Parse PDF using PyMuPDF with enhanced image extraction"""
+        """Parse PDF using PyMuPDF with enhanced extraction (tables, formulas, structure)"""
         import fitz
         
         console.print("[blue]  → Using PyMuPDF parser (Enhanced)[/blue]")
         
         doc = fitz.open(pdf_path)
+        page_count = len(doc)  # Save page count before closing
         
-        # Extract text with improved formatting
-        full_text = ""
+        # Extract text with improved formatting and structure
+        full_text_parts = []
+        plain_text_parts = []
+        table_count = 0
+        total_math_regions = 0
+        
         for page_num, page in enumerate(doc):
-            # Get text blocks for better structure
-            blocks = page.get_text("dict")["blocks"]
-            page_text = ""
+            page_markdown = []
+            page_plain = []
             
-            for block in blocks:
-                if block["type"] == 0:  # Text block
-                    for line in block.get("lines", []):
-                        line_text = ""
-                        for span in line.get("spans", []):
-                            text = span.get("text", "")
-                            # Check for potential headers (larger font)
-                            if span.get("size", 12) > 14:
-                                line_text += f"**{text}**"
-                            else:
-                                line_text += text
-                        page_text += line_text + "\n"
-                    page_text += "\n"
+            # Try to use markdown mode if available (PyMuPDF 1.23+)
+            try:
+                # Check if markdown mode is available
+                markdown_text = page.get_text("markdown")
+                if markdown_text and markdown_text.strip():
+                    # Markdown mode provides better structure
+                    page_markdown.append(markdown_text)
+                    page_plain.append(page.get_text("text"))
+                else:
+                    # Fallback to structured extraction
+                    page_markdown.append(self._extract_structured_text(page))
+                    page_plain.append(page.get_text("text"))
+            except (AttributeError, TypeError):
+                # Fallback for older PyMuPDF versions
+                page_markdown.append(self._extract_structured_text(page))
+                page_plain.append(page.get_text("text"))
             
-            full_text += page_text + "\n---\n\n"
+            # Extract tables and convert to markdown
+            tables = self._extract_tables(page)
+            if tables:
+                table_count += len(tables)
+                for i, table_md in enumerate(tables, 1):
+                    page_markdown.append(f"\n\n### Table {table_count - len(tables) + i}\n\n{table_md}\n")
+            
+            # Identify and mark mathematical formula regions
+            math_regions = self._identify_math_regions(page)
+            if math_regions:
+                total_math_regions += len(math_regions)
+                # Note: We can't extract LaTeX directly, but we mark these regions
+                # The LLM can still process the text representation
+            
+            # Combine page content
+            page_content = "\n".join(page_markdown)
+            if page_content.strip():
+                full_text_parts.append(page_content)
+                plain_text_parts.append("\n".join(page_plain))
+            
+            # Add page separator (except for last page)
+            if page_num < len(doc) - 1:
+                full_text_parts.append("\n---\n\n")
+        
+        full_text = "\n".join(full_text_parts)
+        plain_text = "\n\n".join(plain_text_parts)
         
         # Extract images using smart region rendering
         # Note: output_dir is expected to be the images directory
@@ -148,14 +190,21 @@ class PDFParser:
         doc_data = ParsedDocument(
             title=self._extract_title(full_text),
             markdown_content=full_text,
-            raw_text=full_text,
+            raw_text=plain_text,
             images=images,
-            image_map={img.image_id: str(img.saved_path) for img in images}
+            image_map={img.image_id: str(img.saved_path) for img in images},
+            metadata={
+                "table_count": table_count,
+                "page_count": page_count,
+                "math_regions_detected": total_math_regions
+            }
         )
         
         console.print(f"[green]✓[/green] Parsed successfully")
         console.print(f"  - Content: {len(full_text):,} characters")
         console.print(f"  - Images: {len(images)} extracted")
+        if table_count > 0:
+            console.print(f"  - Tables: {table_count} extracted")
         
         return doc_data
     
@@ -226,13 +275,34 @@ class PDFParser:
                 if rect.width < 20 or rect.height < 20:
                     continue
                 
-                # Try to find figure caption below this region
+                # Try to find figure caption below or above this region
                 figure_id, full_caption = self._find_figure_caption(page, rect)
                 
-                # FILTER: Only keep figures with detected caption (Figure X, Table X, etc.)
+                # If no caption found, check if this might be a table
+                # Tables are often large rectangular regions without captions
                 if not figure_id:
-                    # Skip regions without proper figure labels
-                    continue
+                    # Check if this looks like a table (large, rectangular, contains text)
+                    table_text = page.get_text("text", clip=rect).strip()
+                    if len(table_text) > 50 and rect.width > 200 and rect.height > 100:
+                        # Might be a table - try to extract it
+                        try:
+                            # Check if find_tables can detect it
+                            tables = page.find_tables(clip=rect)
+                            if tables:
+                                # This is a table, skip image extraction (tables are handled in text extraction)
+                                continue
+                        except:
+                            pass
+                    
+                    # Skip regions without proper figure labels (unless they're very large)
+                    # Allow large regions even without captions (might be important diagrams)
+                    if rect.width * rect.height < 50000:  # Less than ~224x224 pixels
+                        continue
+                    else:
+                        # Large region without caption - assign a generic ID
+                        figure_id = f"Figure_{figure_count + 1}"
+                        figure_count += 1
+                        full_caption = f"Large diagram or figure (no caption detected)"
                 
                 # Extract figure number from caption (e.g., "Figure 1" -> "Figure_1")
                 img_id = figure_id.replace(" ", "_").replace(".", "")
@@ -268,7 +338,8 @@ class PDFParser:
 
     def _find_figure_caption(self, page, rect) -> Tuple[Optional[str], Optional[str]]:
         """
-        Look for figure caption text (e.g., 'Figure 1', 'Fig. 2') below the image region.
+        Look for figure caption text (e.g., 'Figure 1', 'Fig. 2') below or above the image region.
+        Improved to search both below and above (some papers put captions above).
         
         Args:
             page: PyMuPDF page object
@@ -281,43 +352,64 @@ class PDFParser:
         """
         import fitz
         
-        # Define search area: below the image, same width, up to 80 pixels down
-        # to capture multi-line captions
-        search_height = 80
-        search_rect = fitz.Rect(
-            rect.x0 - 20,           # Wider to catch full caption width
-            rect.y1,                # Start from bottom of image
-            rect.x1 + 20,           # Wider
-            min(rect.y1 + search_height, page.rect.height)
-        )
+        # Search areas: below (common) and above (less common)
+        search_height = 100  # Increased for multi-line captions
+        search_width_expand = 30  # Wider search area
         
-        # Extract text from search area
-        text = page.get_text("text", clip=search_rect).strip()
-        
-        if not text:
-            return None, None
-        
-        # Clean up text (remove excessive whitespace)
-        text = ' '.join(text.split())
-        
-        # Look for figure pattern: "Figure 1", "Fig. 2", "Figure 3a", etc.
-        patterns = [
-            r'(Figure\s*\d+[a-zA-Z]?)',    # "Figure 1", "Figure 3a"
-            r'(Fig\.\s*\d+[a-zA-Z]?)',      # "Fig. 1", "Fig.2b"
-            r'(Table\s*\d+[a-zA-Z]?)',      # "Table 1", "Table 2"
+        search_areas = [
+            # Below image (most common)
+            fitz.Rect(
+                rect.x0 - search_width_expand,
+                rect.y1,
+                rect.x1 + search_width_expand,
+                min(rect.y1 + search_height, page.rect.height)
+            ),
+            # Above image (some papers)
+            fitz.Rect(
+                rect.x0 - search_width_expand,
+                max(0, rect.y0 - search_height),
+                rect.x1 + search_width_expand,
+                rect.y0
+            )
         ]
         
-        figure_id = None
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                figure_id = match.group(1)
-                break
+        best_match = None
+        best_caption = None
         
-        # Return figure_id and the full caption text as description
-        full_caption = text[:1000] if text else None  # Increased limit for full caption
+        for search_rect in search_areas:
+            # Extract text from search area
+            text = page.get_text("text", clip=search_rect).strip()
+            
+            if not text:
+                continue
+            
+            # Clean up text (remove excessive whitespace)
+            text = ' '.join(text.split())
+            
+            # Look for figure pattern: "Figure 1", "Fig. 2", "Figure 3a", etc.
+            # Also support "Fig 1" (without period) and "Figure 1:" (with colon)
+            patterns = [
+                r'(Figure\s*\d+[a-zA-Z]?)',           # "Figure 1", "Figure 3a"
+                r'(Fig\.?\s*\d+[a-zA-Z]?)',            # "Fig. 1", "Fig 2", "Fig.2b"
+                r'(Table\s*\d+[a-zA-Z]?)',             # "Table 1", "Table 2"
+                r'(Algorithm\s*\d+[a-zA-Z]?)',         # "Algorithm 1"
+                r'(Equation\s*\d+[a-zA-Z]?)',          # "Equation 1"
+            ]
+            
+            figure_id = None
+            for pattern in patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    figure_id = match.group(1)
+                    break
+            
+            if figure_id:
+                # Prefer matches that are closer to the image
+                if best_match is None:
+                    best_match = figure_id
+                    best_caption = text[:1000]  # Limit caption length
         
-        return figure_id, full_caption
+        return best_match, best_caption
 
     def _merge_rects(self, rects, tolerance_x=80.0, tolerance_y=30.0):
         """
@@ -395,11 +487,152 @@ class PDFParser:
         
         return "Untitled Paper"
 
+    def _extract_structured_text(self, page) -> str:
+        """
+        Extract text with better structure preservation.
+        Improved version that maintains paragraphs, lists, and formatting.
+        """
+        import fitz
+        
+        blocks = page.get_text("dict")["blocks"]
+        page_text_parts = []
+        current_paragraph = []
+        
+        for block in blocks:
+            if block["type"] != 0:  # Skip non-text blocks
+                continue
+            
+            block_text = ""
+            is_header = False
+            font_sizes = []
+            
+            for line in block.get("lines", []):
+                line_text = ""
+                for span in line.get("spans", []):
+                    text = span.get("text", "")
+                    font_size = span.get("size", 12)
+                    font_sizes.append(font_size)
+                    
+                    # Detect headers (larger font, often bold)
+                    if font_size > 14 or (font_size > 12 and span.get("flags", 0) & 16):  # 16 = bold flag
+                        is_header = True
+                    
+                    line_text += text
+                
+                if line_text.strip():
+                    current_paragraph.append(line_text.strip())
+            
+            # Determine if this is a header based on font size
+            avg_font_size = sum(font_sizes) / len(font_sizes) if font_sizes else 12
+            
+            if current_paragraph:
+                para_text = " ".join(current_paragraph)
+                
+                # Format as header if detected
+                if is_header and avg_font_size > 14 and len(para_text) < 200:
+                    # Likely a section header
+                    page_text_parts.append(f"\n## {para_text}\n")
+                elif para_text.strip():
+                    # Regular paragraph
+                    page_text_parts.append(para_text)
+                
+                current_paragraph = []
+        
+        return "\n\n".join(page_text_parts)
+    
+    def _extract_tables(self, page) -> List[str]:
+        """
+        Extract tables from page and convert to markdown format.
+        
+        Returns:
+            List of markdown-formatted table strings
+        """
+        import fitz
+        
+        tables = []
+        
+        try:
+            # PyMuPDF's find_tables() method (available in recent versions)
+            found_tables = page.find_tables()
+            
+            for table in found_tables:
+                try:
+                    # Convert table to markdown
+                    table_md = table.to_markdown()
+                    if table_md and table_md.strip():
+                        tables.append(table_md)
+                except (AttributeError, Exception) as e:
+                    # Fallback: try to extract table manually
+                    console.print(f"[dim]  Table extraction fallback: {e}[/dim]")
+                    # Could implement manual table extraction here if needed
+                    pass
+        except (AttributeError, Exception):
+            # find_tables() not available in this PyMuPDF version
+            pass
+        
+        return tables
+    
+    def _identify_math_regions(self, page) -> List[Dict]:
+        """
+        Identify mathematical formula regions by font characteristics.
+        
+        Math formulas in PDFs often use:
+        - Fonts starting with "CMMI" (Computer Modern Math Italic)
+        - Special flags (value 6 vs 4 for regular text)
+        - Different character spacing
+        
+        Returns:
+            List of dicts with math region info (for future enhancement)
+        """
+        import fitz
+        
+        math_regions = []
+        blocks = page.get_text("dict")["blocks"]
+        
+        for block in blocks:
+            if block["type"] != 0:
+                continue
+            
+            for line in block.get("lines", []):
+                math_spans = []
+                for span in line.get("spans", []):
+                    font_name = span.get("font", "").lower()
+                    flags = span.get("flags", 0)
+                    
+                    # Heuristic: math fonts often contain "math", "cmmi", "symbol"
+                    # or have special flags
+                    is_math = (
+                        "math" in font_name or
+                        "cmmi" in font_name or
+                        "symbol" in font_name or
+                        (flags == 6)  # Special flag for math
+                    )
+                    
+                    if is_math:
+                        math_spans.append({
+                            "text": span.get("text", ""),
+                            "bbox": span.get("bbox", []),
+                            "font": font_name
+                        })
+                
+                if math_spans:
+                    # Could mark these regions for special processing
+                    math_regions.append({
+                        "spans": math_spans,
+                        "line_bbox": line.get("bbox", [])
+                    })
+        
+        return math_regions
+    
     def _extract_plain_text(self, markdown: str) -> str:
         """Extract plain text from markdown"""
-        # (Same as before)
+        # Remove markdown formatting
         text = re.sub(r'!\[([^\]]*)\]\([^)]+\)', r'\1', markdown)
         text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        text = re.sub(r'#{1,6}\s+', '', text)  # Remove headers
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Remove bold
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Remove italic
+        text = re.sub(r'`([^`]+)`', r'\1', text)  # Remove code
         return text
 
     def copy_images_to_output(

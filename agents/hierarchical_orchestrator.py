@@ -20,10 +20,12 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from openai import OpenAI
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.panel import Panel
+
+from config import LLMConfig
+from llm import LLMClientFactory
 
 from .hierarchical_prompts import (
     ARCHITECT_SYSTEM, ARCHITECT_PROMPT,
@@ -93,7 +95,7 @@ class HierarchicalOrchestrator:
         temperature: float = 0.3,
         max_tokens: int = 8192,
         max_workers: int = 3,  # For parallel execution
-        verbose: bool = False,  # NEW: Enable detailed logging
+        verbose: bool = False,  # Enable detailed logging
     ):
         """Initialize the hierarchical orchestrator."""
         self.provider = provider
@@ -103,36 +105,20 @@ class HierarchicalOrchestrator:
         self.max_workers = max_workers
         self.verbose = verbose  # Store verbose flag
         
-        # Set up API client
-        import os
+        # Create LLM config and factory
+        llm_config = LLMConfig(
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
         
-        if api_key is None:
-            if provider == "deepseek":
-                api_key = os.getenv("DEEPSEEK_API_KEY")
-            elif provider == "siliconflow":
-                api_key = os.getenv("SILICONFLOW_API_KEY")
-            else:
-                api_key = os.getenv("OPENAI_API_KEY")
+        self.factory = LLMClientFactory(llm_config)
         
-        if not api_key:
-            raise ValueError(f"No API key found for {provider}")
-        
-        if base_url is None:
-            if provider == "deepseek":
-                base_url = "https://api.deepseek.com"
-            elif provider == "siliconflow":
-                base_url = "https://api.siliconflow.com/v1"
-        
-        # DEBUG LOGGING
-        console.print(f"[bold yellow]DEBUG:[/bold yellow] Provider={provider}")
-        console.print(f"[bold yellow]DEBUG:[/bold yellow] Base URL={base_url}")
-        if api_key:
-            masked_key = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "***"
-            console.print(f"[bold yellow]DEBUG:[/bold yellow] API Key={masked_key} (Length: {len(api_key)})")
-        else:
-            console.print(f"[bold red]DEBUG:[/bold red] API Key is None!")
-
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        # Store progress callback (set in analyze_paper)
+        self.progress_callback: Optional[Any] = None
         
         console.print(Panel.fit(
             f"[bold blue]Hierarchical Orchestrator[/bold blue]\n"
@@ -170,6 +156,9 @@ class HierarchicalOrchestrator:
         """
         result = HierarchicalAnalysisResult(title=title)
         
+        # Store progress callback for use in _call_llm
+        self.progress_callback = progress_callback
+        
         # Extract abstract if not provided
         if not abstract:
             abstract = self._extract_abstract(content)
@@ -189,7 +178,8 @@ class HierarchicalOrchestrator:
             title=title,
             abstract=abstract,
             headers=headers,
-            total_pages=total_pages
+            total_pages=total_pages,
+            progress_callback=progress_callback
         )
         result.domain = result.reading_plan.domain
         
@@ -208,41 +198,48 @@ class HierarchicalOrchestrator:
             progress_callback.specialist_started("math_specialist")
             progress_callback.specialist_started("data_auditor")
         
-        # Step 2: Run specialists in parallel
-        specialist_reports = self._run_specialists_parallel(
-            content=content,
-            reading_plan=result.reading_plan
-        )
-        
-        result.context_report = specialist_reports.get("context_hunter", "")
-        result.math_report = specialist_reports.get("math_specialist", "")
-        result.experiment_report = specialist_reports.get("data_auditor", "")
-        
-        # Emit progress: Specialists completed
-        if progress_callback:
-            progress_callback.specialist_completed("context_hunter")
-            progress_callback.specialist_completed("math_specialist")
-            progress_callback.specialist_completed("data_auditor")
-        
-        console.print("\n[bold]═══ Phase 3: Editor Assembly (Parallel EN/ZH) ═══[/bold]")
-        
-        # Emit progress: Editors started
-        if progress_callback:
-            progress_callback.editor_started("english")
-            progress_callback.editor_started("chinese")
-        
-        # Step 3: Editors assemble final reports in parallel
-        # Load figure index for detailed figure information
-        available_figures = self._format_figure_list_from_index(figure_index_path) if figure_index_path else self._format_figure_list(images)
-        
-        # Run English and Chinese editors in parallel
-        editor_reports = self._run_editors_parallel(
-            context_report=result.context_report,
-            math_report=result.math_report,
-            experiment_report=result.experiment_report,
-            available_figures=available_figures,
-            title=title
-        )
+        # Step 2-3: Run specialists and editors in parallel using single executor
+        # Create single ThreadPoolExecutor for all parallel work
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Step 2: Run specialists in parallel
+            specialist_reports = self._run_specialists_parallel(
+                content=content,
+                reading_plan=result.reading_plan,
+                progress_callback=progress_callback,
+                executor=executor
+            )
+            
+            result.context_report = specialist_reports.get("context_hunter", "")
+            result.math_report = specialist_reports.get("math_specialist", "")
+            result.experiment_report = specialist_reports.get("data_auditor", "")
+            
+            # Emit progress: Specialists completed
+            if progress_callback:
+                progress_callback.specialist_completed("context_hunter")
+                progress_callback.specialist_completed("math_specialist")
+                progress_callback.specialist_completed("data_auditor")
+            
+            console.print("\n[bold]═══ Phase 3: Editor Assembly (Parallel EN/ZH) ═══[/bold]")
+            
+            # Emit progress: Editors started
+            if progress_callback:
+                progress_callback.editor_started("english")
+                progress_callback.editor_started("chinese")
+            
+            # Step 3: Editors assemble final reports in parallel
+            # Load figure index for detailed figure information
+            available_figures = self._format_figure_list_from_index(figure_index_path) if figure_index_path else self._format_figure_list(images)
+            
+            # Run English and Chinese editors in parallel (reuse same executor)
+            editor_reports = self._run_editors_parallel(
+                context_report=result.context_report,
+                math_report=result.math_report,
+                experiment_report=result.experiment_report,
+                available_figures=available_figures,
+                title=title,
+                progress_callback=progress_callback,
+                executor=executor
+            )
         
         result.final_report = editor_reports.get("english", "")
         result.final_report_chinese = editor_reports.get("chinese", "")
@@ -266,62 +263,70 @@ class HierarchicalOrchestrator:
         user: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        agent_name: str = "LLM"  # NEW: For verbose logging
+        agent_name: str = "LLM",
+        agent_key: Optional[str] = None,
+        phase: str = "analysis"
     ) -> str:
-        """Make an LLM API call."""
+        """
+        Make an LLM API call using unified factory with progress callbacks.
+        
+        Args:
+            system: System prompt
+            user: User prompt
+            temperature: Override temperature
+            max_tokens: Override max_tokens
+            agent_name: Human-readable agent name for logging
+            agent_key: Agent key for progress events (must match frontend data-agent values)
+            phase: Progress phase ("analysis", "assembly", etc.)
+        """
+        # Map agent_name to agent_key if not provided
+        if agent_key is None:
+            agent_key_map = {
+                "Architect": "architect",
+                "context_hunter": "context_hunter",
+                "math_specialist": "math_specialist",
+                "data_auditor": "data_auditor",
+                "Editor_english": "editor_english",
+                "Editor_chinese": "editor_chinese",
+            }
+            agent_key = agent_key_map.get(agent_name, agent_name.lower().replace(" ", "_"))
+        
         # Verbose logging: show partial input
         if self.verbose:
             console.print(f"\n[dim]─── {agent_name} Input ───[/dim]")
             console.print(f"[dim]System ({len(system)} chars):[/dim] {system[:500]}...")
             console.print(f"[dim]User ({len(user)} chars):[/dim] {user[:800]}...")
         
-        # Retry parameters
-        max_retries = 3
-        base_delay = 2
+        # Use factory for unified LLM call with retry/backoff and progress
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user}
+        ]
         
-        for attempt in range(max_retries + 1):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user}
-                    ],
-                    temperature=temperature or self.temperature,
-                    max_tokens=max_tokens or self.max_tokens,
-                )
-                result = response.choices[0].message.content
-                
-                # Verbose logging: show partial output
-                if self.verbose:
-                    console.print(f"[dim]─── {agent_name} Output ({len(result)} chars) ───[/dim]")
-                    console.print(f"[dim]{result[:800]}...[/dim]")
-                
-                return result
-                
-            except Exception as e:
-                import time
-                import random
-                
-                error_str = str(e)
-                # Check for rate limit or server errors
-                if "429" in error_str or "503" in error_str or "500" in error_str:
-                    if attempt < max_retries:
-                        delay = (base_delay * (2 ** attempt)) + (random.random() * 0.5)
-                        console.print(f"[yellow]⚠ {agent_name} hit {error_str}. Retrying in {delay:.1f}s (Attempt {attempt+1}/{max_retries})...[/yellow]")
-                        time.sleep(delay)
-                        continue
-                
-                # If not retrying or out of retries
-                console.print(f"[red]API Error ({agent_name}):[/red] {e}")
-                raise
+        result = self.factory.chat_completions(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            progress_callback=self.progress_callback,
+            agent_name=agent_name,
+            phase=phase,
+            agent_key=agent_key
+        )
+        
+        # Verbose logging: show partial output
+        if self.verbose:
+            console.print(f"[dim]─── {agent_name} Output ({len(result)} chars) ───[/dim]")
+            console.print(f"[dim]{result[:800]}...[/dim]")
+        
+        return result
     
     def _run_architect(
         self,
         title: str,
         abstract: str,
         headers: List[str],
-        total_pages: int
+        total_pages: int,
+        progress_callback: Optional[Any] = None
     ) -> ReadingPlan:
         """Run the Architect agent to create reading plan."""
         prompt = ARCHITECT_PROMPT.format(
@@ -331,7 +336,14 @@ class HierarchicalOrchestrator:
             total_pages=total_pages
         )
         
-        response = self._call_llm(ARCHITECT_SYSTEM, prompt, temperature=0.2, agent_name="Architect")
+        response = self._call_llm(
+            ARCHITECT_SYSTEM, 
+            prompt, 
+            temperature=0.2, 
+            agent_name="Architect",
+            agent_key="architect",
+            phase="analysis"
+        )
         response = self._clean_llm_response(response)
         
         # Parse JSON from response
@@ -431,7 +443,9 @@ class HierarchicalOrchestrator:
     def _run_specialists_parallel(
         self,
         content: str,
-        reading_plan: ReadingPlan
+        reading_plan: ReadingPlan,
+        progress_callback: Optional[Any] = None,
+        executor: Optional[ThreadPoolExecutor] = None
     ) -> Dict[str, str]:
         """Run all three specialists in parallel."""
         reports = {}
@@ -463,24 +477,33 @@ class HierarchicalOrchestrator:
             for name, _, _, _, _ in specialists:
                 task_ids[name] = progress.add_task(f"[cyan]{name}[/cyan]", total=100)
             
-            # Execute in parallel
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Execute in parallel (use provided executor or create new one)
+            executor_context = executor if executor else ThreadPoolExecutor(max_workers=self.max_workers)
+            should_close_executor = executor is None
+            
+            try:
+                if should_close_executor:
+                    executor_context = executor_context.__enter__()
+                
                 futures = {}
                 
                 for name, system, prompt_template, task_assignment, section_content in specialists:
-                    print(f"length of section_content: {len(section_content)}")
+                    if self.verbose:
+                        console.print(f"[dim]  {name} section_content length: {len(section_content)}[/dim]")
                     prompt = prompt_template.format(
                         task_assignment=json.dumps(task_assignment, indent=2),
                         content=section_content  # No truncation for full context
                     )
                     
-                    future = executor.submit(
+                    future = executor_context.submit(
                         self._call_llm,
                         system,
                         prompt,
                         None,  # temperature (use default)
                         None,  # max_tokens (use default)
-                        name   # agent_name for verbose logging
+                        name,  # agent_name for verbose logging
+                        name,  # agent_key (matches frontend data-agent)
+                        "analysis"  # phase
                     )
                     futures[future] = name
                 
@@ -495,6 +518,9 @@ class HierarchicalOrchestrator:
                     except Exception as e:
                         reports[name] = f"Error: {e}"
                         console.print(f"[red]✗[/red] {name} failed: {e}")
+            finally:
+                if should_close_executor:
+                    executor_context.__exit__(None, None, None)
         
         return reports
     
@@ -504,15 +530,17 @@ class HierarchicalOrchestrator:
         math_report: str,
         experiment_report: str,
         available_figures: str,
-        title: str
+        title: str,
+        progress_callback: Optional[Any] = None,
+        executor: Optional[ThreadPoolExecutor] = None
     ) -> Dict[str, str]:
         """Run English and Chinese editors in parallel."""
         reports = {}
         
         # Define editor tasks
         editors = [
-            ("english", EDITOR_SYSTEM, EDITOR_PROMPT),
-            ("chinese", EDITOR_CHINESE_SYSTEM, EDITOR_CHINESE_PROMPT),
+            ("english", "editor_english", EDITOR_SYSTEM, EDITOR_PROMPT),
+            ("chinese", "editor_chinese", EDITOR_CHINESE_SYSTEM, EDITOR_CHINESE_PROMPT),
         ]
         
         with Progress(
@@ -523,13 +551,20 @@ class HierarchicalOrchestrator:
         ) as progress:
             
             task_ids = {}
-            for name, _, _ in editors:
+            for name, _, _, _ in editors:
                 task_ids[name] = progress.add_task(f"[cyan]Editor ({name})[/cyan]", total=100)
             
-            with ThreadPoolExecutor(max_workers=min(2, self.max_workers)) as executor:
+            # Use provided executor or create new one
+            executor_context = executor if executor else ThreadPoolExecutor(max_workers=min(2, self.max_workers))
+            should_close_executor = executor is None
+            
+            try:
+                if should_close_executor:
+                    executor_context = executor_context.__enter__()
+                
                 futures = {}
                 
-                for name, system, prompt_template in editors:
+                for name, agent_key, system, prompt_template in editors:
                     prompt = prompt_template.format(
                         context_report=context_report,
                         math_report=math_report,
@@ -537,13 +572,15 @@ class HierarchicalOrchestrator:
                         available_figures=available_figures
                     )
                     
-                    future = executor.submit(
+                    future = executor_context.submit(
                         self._call_llm,
                         system,
                         prompt,
-                        None,
-                        None,
-                        f"Editor_{name}"
+                        None,  # temperature (use default)
+                        None,  # max_tokens (use default)
+                        f"Editor ({name})",  # agent_name
+                        agent_key,  # agent_key (matches frontend data-agent)
+                        "assembly"  # phase
                     )
                     futures[future] = name
                 
@@ -566,6 +603,9 @@ class HierarchicalOrchestrator:
                     except Exception as e:
                         reports[name] = f"Error: {e}"
                         console.print(f"[red]✗[/red] Editor ({name}) failed: {e}")
+            finally:
+                if should_close_executor:
+                    executor_context.__exit__(None, None, None)
         
         return reports
     

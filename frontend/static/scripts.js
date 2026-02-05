@@ -523,15 +523,24 @@ function handleAnalysisComplete(data) {
     state.reports = reports;
     state.reportId = metadata.report_id;
 
-    // Mark all progress steps as completed (since orchestrator doesn't send individual updates)
+    // Only mark steps as completed if they're still waiting/active (fallback)
+    // Real-time progress events should have already updated most steps
     const allSteps = document.querySelectorAll('.progress-step');
     allSteps.forEach(step => {
-        step.classList.remove('active');
-        step.classList.add('completed');
-        const statusEl = step.querySelector('.step-status');
-        if (statusEl) {
-            statusEl.setAttribute('data-i18n', 'completed');
-            statusEl.textContent = translations[state.uiLang].completed;
+        // Only update if step is still in waiting/active state (not already completed)
+        if (!step.classList.contains('completed') && !step.classList.contains('error')) {
+            step.classList.remove('active');
+            step.classList.add('completed');
+            const statusEl = step.querySelector('.step-status');
+            if (statusEl) {
+                // Only update if status is still "Waiting..." or generic
+                const currentText = statusEl.textContent.toLowerCase();
+                if (currentText.includes('waiting') || currentText === '') {
+                    statusEl.setAttribute('data-i18n', 'completed');
+                    statusEl.textContent = translations[state.uiLang].completed;
+                }
+                // Otherwise keep the more specific message from progress events
+            }
         }
     });
 
