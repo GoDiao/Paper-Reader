@@ -109,15 +109,29 @@ class HierarchicalOrchestrator:
         if api_key is None:
             if provider == "deepseek":
                 api_key = os.getenv("DEEPSEEK_API_KEY")
+            elif provider == "siliconflow":
+                api_key = os.getenv("SILICONFLOW_API_KEY")
             else:
                 api_key = os.getenv("OPENAI_API_KEY")
         
         if not api_key:
             raise ValueError(f"No API key found for {provider}")
         
-        if base_url is None and provider == "deepseek":
-            base_url = "https://api.deepseek.com"
+        if base_url is None:
+            if provider == "deepseek":
+                base_url = "https://api.deepseek.com"
+            elif provider == "siliconflow":
+                base_url = "https://api.siliconflow.com/v1"
         
+        # DEBUG LOGGING
+        console.print(f"[bold yellow]DEBUG:[/bold yellow] Provider={provider}")
+        console.print(f"[bold yellow]DEBUG:[/bold yellow] Base URL={base_url}")
+        if api_key:
+            masked_key = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "***"
+            console.print(f"[bold yellow]DEBUG:[/bold yellow] API Key={masked_key} (Length: {len(api_key)})")
+        else:
+            console.print(f"[bold red]DEBUG:[/bold red] API Key is None!")
+
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         
         console.print(Panel.fit(
@@ -261,27 +275,46 @@ class HierarchicalOrchestrator:
             console.print(f"[dim]System ({len(system)} chars):[/dim] {system[:500]}...")
             console.print(f"[dim]User ({len(user)} chars):[/dim] {user[:800]}...")
         
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user}
-                ],
-                temperature=temperature or self.temperature,
-                max_tokens=max_tokens or self.max_tokens,
-            )
-            result = response.choices[0].message.content
-            
-            # Verbose logging: show partial output
-            if self.verbose:
-                console.print(f"[dim]─── {agent_name} Output ({len(result)} chars) ───[/dim]")
-                console.print(f"[dim]{result[:800]}...[/dim]")
-            
-            return result
-        except Exception as e:
-            console.print(f"[red]API Error:[/red] {e}")
-            raise
+        # Retry parameters
+        max_retries = 3
+        base_delay = 2
+        
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user}
+                    ],
+                    temperature=temperature or self.temperature,
+                    max_tokens=max_tokens or self.max_tokens,
+                )
+                result = response.choices[0].message.content
+                
+                # Verbose logging: show partial output
+                if self.verbose:
+                    console.print(f"[dim]─── {agent_name} Output ({len(result)} chars) ───[/dim]")
+                    console.print(f"[dim]{result[:800]}...[/dim]")
+                
+                return result
+                
+            except Exception as e:
+                import time
+                import random
+                
+                error_str = str(e)
+                # Check for rate limit or server errors
+                if "429" in error_str or "503" in error_str or "500" in error_str:
+                    if attempt < max_retries:
+                        delay = (base_delay * (2 ** attempt)) + (random.random() * 0.5)
+                        console.print(f"[yellow]⚠ {agent_name} hit {error_str}. Retrying in {delay:.1f}s (Attempt {attempt+1}/{max_retries})...[/yellow]")
+                        time.sleep(delay)
+                        continue
+                
+                # If not retrying or out of retries
+                console.print(f"[red]API Error ({agent_name}):[/red] {e}")
+                raise
     
     def _run_architect(
         self,
@@ -493,7 +526,7 @@ class HierarchicalOrchestrator:
             for name, _, _ in editors:
                 task_ids[name] = progress.add_task(f"[cyan]Editor ({name})[/cyan]", total=100)
             
-            with ThreadPoolExecutor(max_workers=2) as executor:
+            with ThreadPoolExecutor(max_workers=min(2, self.max_workers)) as executor:
                 futures = {}
                 
                 for name, system, prompt_template in editors:

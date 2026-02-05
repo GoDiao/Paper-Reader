@@ -51,14 +51,19 @@ class ChatAgent:
         if api_key is None:
             if provider == "deepseek":
                 api_key = os.getenv("DEEPSEEK_API_KEY")
+            elif provider == "siliconflow":
+                api_key = os.getenv("SILICONFLOW_API_KEY")
             else:
                 api_key = os.getenv("OPENAI_API_KEY")
         
         if not api_key:
             raise ValueError(f"No API key found for {provider}")
         
-        if base_url is None and provider == "deepseek":
-            base_url = "https://api.deepseek.com"
+        if base_url is None:
+            if provider == "deepseek":
+                base_url = "https://api.deepseek.com"
+            elif provider == "siliconflow":
+                base_url = "https://api.siliconflow.com/v1"
         
         self.client = OpenAI(api_key=api_key, base_url=base_url)
     

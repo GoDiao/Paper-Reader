@@ -248,10 +248,16 @@ async def run_analysis(
                 "Creating reading plan...", 0
             )
             
+            # Determine max_workers based on provider to avoid rate limits
+            max_workers = 3
+            if provider == "siliconflow":
+                max_workers = 1  # Reduce concurrency for Silicon Flow to avoid 429 errors
+                
             orchestrator = HierarchicalOrchestrator(
                 provider=provider,
                 model=model,
-                max_tokens=LLMConfig(model=model).get_max_tokens(),  # Model-specific token limit
+                max_tokens=LLMConfig(model=model).get_max_tokens(),
+                max_workers=max_workers,
                 verbose=verbose
             )
             

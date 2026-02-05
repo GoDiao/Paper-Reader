@@ -335,6 +335,16 @@ const modelOptions = {
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
         { value: 'o1', label: 'o1 (Reasoning)' },
         { value: 'o1-mini', label: 'o1-mini' }
+    ],
+    siliconflow: [
+        { value: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3' },
+        { value: 'deepseek-ai/DeepSeek-R1', label: 'DeepSeek-R1 (Reasoning)' },
+        { value: 'deepseek-ai/DeepSeek-V3.2', label: 'DeepSeek-V3.2' },
+        { value: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen2.5-72B' },
+        { value: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen2.5-Coder-32B' },
+        { value: 'MiniMaxAI/MiniMax-M2.1', label: 'MiniMax-M2.1' },
+        { value: 'zai-org/GLM-4.7', label: 'GLM-4.7' },
+        { value: 'moonshotai/Kimi-K2-Thinking', label: 'Kimi-K2 (Thinking)' }
     ]
 };
 

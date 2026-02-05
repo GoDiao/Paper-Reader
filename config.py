@@ -22,6 +22,15 @@ class LLMConfig(BaseModel):
         "deepseek-chat": 8192,
         "deepseek-reasoner": 16384,   # DeepSeek-R1 (official API name)
         "deepseek-r1-distill": 16384, # Distilled reasoning model
+        # Silicon Flow models
+        "deepseek-ai/DeepSeek-V3": 8192,
+        "deepseek-ai/DeepSeek-R1": 16384,
+        "deepseek-ai/DeepSeek-V3.2": 8192,
+        "Qwen/Qwen2.5-72B-Instruct": 8192,
+        "Qwen/Qwen2.5-Coder-32B-Instruct": 8192,
+        "MiniMaxAI/MiniMax-M2.1": 8192,
+        "zai-org/GLM-4.7": 8192,
+        "moonshotai/Kimi-K2-Thinking": 16384,
         # OpenAI models
         "gpt-4o": 16384,
         "gpt-4o-mini": 16384,
@@ -30,9 +39,9 @@ class LLMConfig(BaseModel):
         "o1-preview": 32768,
     }
     
-    provider: Literal["openai", "deepseek"] = Field(
+    provider: Literal["openai", "deepseek", "siliconflow"] = Field(
         default="deepseek",
-        description="API provider: 'openai' or 'deepseek'"
+        description="API provider: 'openai', 'deepseek', or 'siliconflow'"
     )
     
     api_key: Optional[str] = Field(
@@ -68,7 +77,12 @@ class LLMConfig(BaseModel):
     
     def is_thinking_model(self) -> bool:
         """Check if the current model is a reasoning/thinking model"""
-        thinking_models = {"deepseek-r1", "deepseek-r1-distill", "o1", "o1-mini", "o1-preview"}
+        thinking_models = {
+            "deepseek-r1", "deepseek-r1-distill", 
+            "deepseek-ai/DeepSeek-R1", # Silicon Flow R1
+            "moonshotai/Kimi-K2-Thinking", # Kimi Thinking
+            "o1", "o1-mini", "o1-preview"
+        }
         return self.model in thinking_models
     
     def get_api_key(self) -> str:
@@ -78,8 +92,10 @@ class LLMConfig(BaseModel):
         
         if self.provider == "openai":
             key = os.getenv("OPENAI_API_KEY")
-        else:  # deepseek
+        elif self.provider == "deepseek":
             key = os.getenv("DEEPSEEK_API_KEY")
+        else:  # siliconflow
+            key = os.getenv("SILICONFLOW_API_KEY")
         
         if not key:
             raise ValueError(
@@ -95,6 +111,8 @@ class LLMConfig(BaseModel):
         
         if self.provider == "deepseek":
             return "https://api.deepseek.com"
+        elif self.provider == "siliconflow":
+            return "https://api.siliconflow.com/v1"
         
         return None  # Use default for OpenAI
 
