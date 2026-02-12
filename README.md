@@ -122,11 +122,22 @@ python web_server.py
 
 Open **<http://localhost:8000>** in your browser.
 
+> **Note (Parser Backend in Web Mode)**  
+> The web server currently uses the `auto` strategy by default:  
+> - If MinerU (`pip install mineru`) is installed, it will try the **MinerU** backend first.  
+> - If MinerU is not installed or fails, it will automatically fall back to the **PyMuPDF** backend.
+
 #### 2. Command Line
 
 ```bash
-# Full hierarchical analysis (Default)
+# Full hierarchical analysis (Default, auto parser backend)
 python main.py papers/attention_is_all_you_need.pdf
+
+# Force fast PyMuPDF backend
+python main.py paper.pdf --parser pymupdf
+
+# Force high-fidelity MinerU backend (requires: pip install mineru)
+python main.py paper.pdf --parser mineru
 
 # Save intermediate agent outputs
 python main.py paper.pdf --verbose
@@ -134,6 +145,22 @@ python main.py paper.pdf --verbose
 # Use OpenAI instead of DeepSeek
 python main.py paper.pdf --provider openai --model gpt-4o
 ```
+
+### PDF Parsers: PyMuPDF vs MinerU
+
+- **PyMuPDF (Default, Fast)**  
+  - No extra dependencies beyond `pymupdf`.  
+  - Very fast, good enough for most standard papers.  
+  - Enhanced in this project with table extraction, math-region heuristics, and smarter figure detection.
+
+- **MinerU (Optional, High-Fidelity)**  
+  - Install via `pip install mineru` (and follow MinerU's own docs for GPU/driver requirements).  
+  - Better at preserving complex layouts, multi-column structure, tables, and math-heavy pages.  
+  - When used, this project normalizes MinerU's Markdown + images into the same `ParsedDocument` format as PyMuPDF, so downstream agents and UI work identically.
+
+> **Repository Note**  
+> The Git repo only contains the **integration code** (e.g., `parsers/pdf_parser.py`).  
+> Heavy MinerU model/checkpoint data is cached under `MinerU/ckpt/` **and is git-ignored** by default, so you don't accidentally push large weights.
 
 ---
 
@@ -177,6 +204,12 @@ paper_reader/
 ---
 
 ## 🚀 Changelog
+
+### v1.3.0 - MinerU Parsing Upgrade
+
+- **🧠 MinerU Parser Backend**: Integrated MinerU (Magic-PDF 2.x pipeline) as a high-fidelity PDF parser for complex academic papers, with better layout, table, and math structure preservation.
+- **⚙️ Switchable PDF Backend**: Added a selectable parser backend in CLI (`--parser auto|pymupdf|mineru`) and web mode, so you can choose fast PyMuPDF, high-quality MinerU, or an `auto` strategy that tries MinerU first and falls back to PyMuPDF if unavailable or failing.
+- **📂 Unified Output Pipeline**: Normalized MinerU outputs into the existing `ParsedDocument` + figure index flow so that downstream LLM agents, report generation, and UI work seamlessly regardless of which parser backend you choose.
 
 ### v1.2.0 - Architecture & Performance Improvements
 

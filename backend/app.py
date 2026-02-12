@@ -65,6 +65,7 @@ class AnalysisRequest(BaseModel):
     provider: str = "deepseek"
     model: str = "deepseek-chat"
     verbose: bool = False
+    parser: str = "auto"  # "auto", "mineru", "pymupdf"
 
 
 class ChatRequest(BaseModel):
@@ -201,7 +202,8 @@ async def run_analysis(
     mode: str,
     provider: str,
     model: str,
-    verbose: bool
+    verbose: bool,
+    parser_type: str = "auto"
 ):
     """Background task to run paper analysis with WebSocket updates."""
     try:
@@ -225,11 +227,11 @@ async def run_analysis(
         # ===== Phase 1: Parse PDF =====
         await ws_manager.send_progress(
             session_id, "parsing", "pdf_parser", "started",
-            "Starting PDF parsing...", 0
+            f"Starting PDF parsing ({parser_type})...", 0
         )
         
         parser = PDFParser()
-        parsed_doc = parser.parse(pdf_path, images_dir)
+        parsed_doc = parser.parse(pdf_path, images_dir, parser_backend=parser_type)
         
         await ws_manager.send_progress(
             session_id, "parsing", "pdf_parser", "completed",
@@ -403,9 +405,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 provider = message.get("provider", "deepseek")
                 model = message.get("model", "deepseek-chat")
                 verbose = message.get("verbose", False)
+                parser = message.get("parser", "auto")
                 
                 asyncio.create_task(
-                    run_analysis(upload_id, session_id, mode, provider, model, verbose)
+                    run_analysis(upload_id, session_id, mode, provider, model, verbose, parser)
                 )
                 
     except WebSocketDisconnect:

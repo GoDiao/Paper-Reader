@@ -158,6 +158,7 @@ const elements = {
     analysisMode: document.getElementById('analysisMode'),
     llmProvider: document.getElementById('llmProvider'),
     llmModel: document.getElementById('llmModel'),
+    parserBackend: document.getElementById('parserBackend'),
 
     // Analysis
     analysisSection: document.getElementById('analysisSection'),
@@ -448,7 +449,8 @@ function connectWebSocket() {
             mode: elements.analysisMode.value,
             provider: elements.llmProvider.value,
             model: elements.llmModel.value,
-            verbose: false
+            verbose: false,
+            parser: elements.parserBackend ? elements.parserBackend.value : 'auto'
         }));
     };
 

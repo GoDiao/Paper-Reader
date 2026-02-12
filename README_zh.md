@@ -120,13 +120,24 @@ OPENAI_API_KEY=sk-your-key
 python web_server.py
 ```
 
-在浏览器中打开 **<http://localhost:8000**。>
+在浏览器中打开 **<http://localhost:8000>**。
+
+> **说明（Web 模式下的解析后端）**  
+> Web 服务当前默认使用 `auto` 策略：  
+> - 如果本地已安装 MinerU（`pip install mineru`），会优先尝试 **MinerU** 解析。  
+> - 如果 MinerU 未安装或解析失败，则自动回退到 **PyMuPDF** 后端。
 
 #### 2. 命令行 (CLI)
 
 ```bash
-# 全层级深度分析 (默认)
+# 全层级深度分析（默认，自动选择解析后端）
 python main.py papers/attention_is_all_you_need.pdf
+
+# 强制使用快速的 PyMuPDF 解析后端
+python main.py paper.pdf --parser pymupdf
+
+# 强制使用高保真的 MinerU 解析后端（需要先安装：pip install mineru）
+python main.py paper.pdf --parser mineru
 
 # 保存所有 Agent 的中间输出
 python main.py paper.pdf --verbose
@@ -134,6 +145,22 @@ python main.py paper.pdf --verbose
 # 使用 OpenAI 替代 DeepSeek
 python main.py paper.pdf --provider openai --model gpt-4o
 ```
+
+### PDF 解析器：PyMuPDF vs MinerU
+
+- **PyMuPDF（默认，速度快）**  
+  - 只依赖 `pymupdf`，无需额外安装大型模型。  
+  - 解析速度快，对大部分普通论文已经足够。  
+  - 在本项目中进行了增强：支持表格提取、数学区域启发式识别、更智能的图像检测与标题匹配。
+
+- **MinerU（可选，高保真）**  
+  - 通过 `pip install mineru` 安装（并按 MinerU 官方文档配置 GPU / 驱动等环境）。  
+  - 更擅长保留复杂版式、多栏结构、表格以及公式密集的页面。  
+  - 本项目会将 MinerU 产出的 Markdown + 图片规范化为统一的 `ParsedDocument` 结构，下游 Agent 和前端 UI 在不同解析后端之间无缝复用。
+
+> **仓库说明**  
+> Git 仓库中只包含 **集成代码**（例如 `parsers/pdf_parser.py`），不会包含 MinerU 的大模型 / 权重文件。  
+> MinerU 的模型与检查点会缓存在 `MinerU/ckpt/` 目录下，并已在 `.gitignore` 中忽略，避免误把大文件推送到远端仓库。
 
 ---
 
@@ -177,6 +204,12 @@ paper_reader/
 ---
 
 ## 🚀 更新日志
+
+### v1.3.0 - MinerU 解析升级
+
+- **🧠 MinerU 解析后端**: 集成 MinerU（Magic-PDF 2.x pipeline）作为高保真 PDF 解析器，更好保留复杂论文的版式结构、表格与数学区域。
+- **⚙️ 可切换解析后端**: 支持在命令行通过 `--parser auto|pymupdf|mineru` 以及 Web 模式中选择解析策略，可在更快的 PyMuPDF 与更高质量的 MinerU 之间自由切换，或使用 `auto` 先尝试 MinerU 失败后自动回退到 PyMuPDF。
+- **📂 统一输出管线**: 将 MinerU 的输出规整为统一的 `ParsedDocument` + 图像索引格式，下游 LLM Agent、报告生成和前端 UI 在不同解析后端之间无缝复用。
 
 ### v1.2.0 - 架构与性能优化
 

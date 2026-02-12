@@ -75,6 +75,25 @@ class ReportGenerator:
             
             # Find image path
             img_path = image_map.get(fig_id)
+            
+            # Fallback lookup strategies
+            if not img_path:
+                # 1. Try lowercase
+                img_path = image_map.get(fig_id.lower())
+            
+            if not img_path:
+                # 2. Try replacing spaces with underscores
+                img_path = image_map.get(fig_id.replace(' ', '_'))
+                
+            if not img_path:
+                # 3. Try standardizing "Figure X" -> "fig_x"
+                # Handle variations: "Figure 1", "Figure_1", "Fig. 1", "Fig-1"
+                import re
+                match = re.search(r'(?:Figure|Fig)[_\s.-]*(\d+)', fig_id, re.IGNORECASE)
+                if match:
+                    num = match.group(1)
+                    img_path = image_map.get(f"fig_{num}")
+            
             if not img_path:
                 return f"> *[Figure {fig_id} not found]*"
                 

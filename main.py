@@ -126,6 +126,14 @@ Examples:
         help="Enable verbose output"
     )
     
+    parser.add_argument(
+        "--parser",
+        type=str,
+        choices=["auto", "pymupdf", "mineru"],
+        default="auto",
+        help="PDF parser backend: 'pymupdf' (fast, default) or 'mineru' (high-fidelity, requires setup)"
+    )
+    
     return parser.parse_args()
 
 
@@ -265,7 +273,8 @@ def main():
         
         parsed_doc = parser.parse(
             pdf_path=str(pdf_path),
-            output_dir=output_dir / "parsed"
+            output_dir=output_dir / "parsed",
+            parser_backend=args.parser
         )
         
         console.print(f"[green]✓[/green] Title: {parsed_doc.title[:80]}...")
@@ -274,15 +283,19 @@ def main():
         
         # Copy images to output
         if parsed_doc.images:
-            parser.copy_images_to_output(parsed_doc.images, images_dir)
-            parsed_doc.image_map = {
-                img.image_id: str(images_dir / img.original_path.name)
-                for img in parsed_doc.images
-                if img.original_path
-            }
+            # For MinerU, images are already post-processed and placed in the correct 'parsed' directory
+            # So we skip the generic copy logic which would flatten them into 'images' and lose the renaming
+            if parsed_doc.metadata.get("parser") != "mineru":
+                parser.copy_images_to_output(parsed_doc.images, images_dir)
+                parsed_doc.image_map = {
+                    img.image_id: str(images_dir / img.original_path.name)
+                    for img in parsed_doc.images
+                    if img.original_path
+                }
+            
             # Generate figure index for agent use
             parser.generate_figure_index(parsed_doc.images, output_dir)
-        # exit()
+        exit()
         # Step 2: Analyze with LLM
         console.print("\n[bold]═══ Step 2: Analyzing Paper ═══[/bold]")
         

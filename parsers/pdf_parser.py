@@ -87,19 +87,35 @@ class PDFParser:
             console.print("[dim]PyMuPDF not installed[/dim]")
             return False
     
+    def _check_mineru(self) -> bool:
+        """Check if MinerU (mineru package) is installed"""
+        try:
+            import mineru
+            console.print("[green]✓[/green] MinerU (mineru) available")
+            return True
+        except ImportError:
+            return False
+
     def parse(
         self,
         pdf_path: str,
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
+        parser_backend: str = "auto"  # "auto", "mineru", "pymupdf"
     ) -> ParsedDocument:
         """
-        Parse a PDF document.
+        Parse a PDF document with specified backend strategy.
+        
+        Strategies:
+        - "pymupdf": Force use of PyMuPDF (fast, robust).
+        - "mineru": Force use of MinerU (slow, better layout). Error if fails.
+        - "auto": Try MinerU if available. If it fails or not installed, fallback to PyMuPDF.
         """
         pdf_path = Path(pdf_path)
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF not found: {pdf_path}")
         
         console.print(f"[blue]📄 Parsing:[/blue] {pdf_path.name}")
+        console.print(f"[dim]Backend strategy: {parser_backend}[/dim]")
         
         # Set up output directory
         if output_dir is None:
@@ -107,8 +123,32 @@ class PDFParser:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Always use PyMuPDF with our enhanced extraction logic
-        return self._parse_with_pymupdf(pdf_path, output_dir)
+        # Strategy Logic
+        if parser_backend == "pymupdf":
+            return self._parse_with_pymupdf(pdf_path, output_dir)
+            
+        elif parser_backend == "mineru":
+            # Strict mode: fail if MinerU fails
+            if not self._check_mineru():
+                raise ImportError("MinerU selected but not installed. Install with `pip install mineru`")
+            return self._parse_with_mineru(pdf_path, output_dir)
+            
+        elif parser_backend == "auto":
+            # Intelligent mode: Try MinerU, fallback to PyMuPDF
+            if self._check_mineru():
+                try:
+                    return self._parse_with_mineru(pdf_path, output_dir)
+                except Exception as e:
+                    console.print(f"[yellow]⚠ MinerU parsing failed: {e}[/yellow]")
+                    console.print("[yellow]⚠ Falling back to PyMuPDF...[/yellow]")
+                    return self._parse_with_pymupdf(pdf_path, output_dir)
+            else:
+                # MinerU not installed, silent fallback
+                return self._parse_with_pymupdf(pdf_path, output_dir)
+        
+        else:
+            console.print(f"[yellow]Unknown backend '{parser_backend}', defaulting to PyMuPDF[/yellow]")
+            return self._parse_with_pymupdf(pdf_path, output_dir)
     
     def _parse_with_pymupdf(
         self,
@@ -205,6 +245,173 @@ class PDFParser:
         console.print(f"  - Images: {len(images)} extracted")
         if table_count > 0:
             console.print(f"  - Tables: {table_count} extracted")
+        
+        return doc_data
+    
+    
+    def _parse_with_mineru(
+        self,
+        pdf_path: Path,
+        output_dir: Path
+    ) -> ParsedDocument:
+        """
+        Parse PDF using MinerU (Magic-PDF) 2.x API.
+        Uses mineru.cli.common.do_parse for integration.
+        """
+        console.print("[blue]  → Using MinerU parser (Pipeline Mode)[/blue]")
+        
+        # Set HuggingFace and ModelScope cache to local ckpt directory
+        import os
+        ckpt_path = Path(__file__).parent.parent / "MinerU" / "ckpt"
+        ckpt_path.mkdir(parents=True, exist_ok=True)
+        os.environ["HF_HOME"] = str(ckpt_path.resolve())
+        os.environ["MODELSCOPE_CACHE"] = str(ckpt_path.resolve())
+        
+        try:
+            from mineru.cli.common import do_parse, read_fn
+        except ImportError:
+            raise ImportError("MinerU 2.x not installed. Please install with `pip install mineru`")
+
+        # Prepare parameters
+        pdf_path_obj = Path(pdf_path)
+        file_name = pdf_path_obj.stem
+        # Ensure output directory is ready (MinerU creates a subdir based on filename)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        console.print(f"[dim]  Reading file: {file_name}[/dim]")
+        pdf_bytes = read_fn(pdf_path_obj)
+        
+        # Execute MinerU Pipeline
+        # This will generate output_dir/{file_name}/{parse_method}/{file_name}.md
+        # Defaulting to 'pipeline' backend (CPU friendly) and 'auto' method
+        try:
+            do_parse(
+                output_dir=str(output_dir),
+                pdf_file_names=[file_name],
+                pdf_bytes_list=[pdf_bytes],
+                p_lang_list=["en"], # Default usually English
+                backend="pipeline",
+                parse_method="auto",
+                f_dump_md=True,
+                f_dump_middle_json=False,
+                f_dump_model_output=False,
+                f_dump_orig_pdf=False,
+                f_dump_content_list=False,
+                start_page_id=0,
+                end_page_id=None
+            )
+        except Exception as e:
+            raise RuntimeError(f"MinerU internal error: {e}")
+
+        # Locate Output
+        # MinerU output structure: {output_dir}/{file_name}/auto/{file_name}.md
+        # Note: 'auto' is the parse_method. If it chose 'txt' or 'ocr', folder name changes.
+        # We need to find where it landed.
+        mineru_sub_dir = output_dir / file_name
+        md_file = None
+        images_dir = None
+        
+        if mineru_sub_dir.exists():
+            # Search for the .md file recursively in the subdir
+            found_mds = list(mineru_sub_dir.rglob(f"{file_name}.md"))
+            if found_mds:
+                md_file = found_mds[0]
+                # Usually images are in 'images' folder alongside the .md
+                images_dir = md_file.parent / "images"
+        
+        if not md_file or not md_file.exists():
+            raise FileNotFoundError("MinerU finished but output Markdown file was not found.")
+            
+        # Read Content
+        with open(md_file, "r", encoding="utf-8") as f:
+            md_content = f.read()
+
+        # =========================================================
+        # Post-Processing: Rename Images & Filter
+        # =========================================================
+        import re
+        import shutil
+        
+        # Target directory for semantic images 
+        # output_dir here IS the images directory from caller
+        target_images_dir = output_dir 
+        target_images_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Pattern: ![](images/hash.jpg) ... Figure X: Caption
+        # We look for the image link followed by a Figure caption nearby
+        # MinerU usually puts caption immediately after image
+        pattern = re.compile(r'!\[(.*?)\]\((.*?)\)\s*\n\s*(Figure\s*(\d+).*?)(?=\n|$)', re.IGNORECASE)
+        
+        console.print(f"[dim]  Searching for image captions in {len(md_content)} chars...[/dim]")
+        
+        final_images = []
+        processed_hashes = set()
+        
+        def replace_match(match):
+            alt_text = match.group(1)
+            original_rel_path = match.group(2) # e.g. "images/hash.jpg"
+            caption_line = match.group(3)      # e.g. "Figure 1: Comparison..."
+            fig_num = match.group(4)           # e.g. "1"
+            
+            # Extract hash filename
+            # MinerU output image path is relative to MD file
+            original_path_obj = md_file.parent / original_rel_path
+            
+            if not original_path_obj.exists():
+                return match.group(0) # Keep as is if file missing
+            
+            # Filter: If filename or caption implies it's NOT a figure (e.g. Table)
+            # But the regex requires "Figure" in caption, so we are somewhat safe.
+            # Just separate check if needed.
+                
+            # Define new name
+            new_filename = f"Figure_{fig_num}.jpg"
+            target_path = target_images_dir / new_filename
+            
+            # Copy and rename
+            try:
+                shutil.copy2(original_path_obj, target_path)
+                processed_hashes.add(original_path_obj.name)
+                
+                # Add to result list
+                # Add to result list
+                final_images.append(ImageInfo(
+                    image_id=f"fig_{fig_num}",
+                    page_number=0, # MinerU doesn't easily give page num in MD, default to 0
+                    caption=caption_line,
+                    saved_path=str(target_path),
+                    original_path=original_path_obj
+                ))
+                
+                # Relativize for Markdown (assuming MD is in output_dir)
+                # Let's use `images/Figure_1.jpg`
+                return f"![{alt_text}](images/{new_filename})\n{caption_line}"
+                
+            except Exception as e:
+                console.print(f"[yellow]Warning: Failed to process image {original_path_obj}: {e}[/yellow]")
+                return match.group(0)
+
+        # Apply replacement to markdown content
+        new_md_content = pattern.sub(replace_match, md_content)
+        
+        # Construct ParsedDocument
+        doc_data = ParsedDocument(
+            title=self._extract_title(new_md_content),
+            markdown_content=new_md_content,
+            raw_text=self._extract_plain_text(new_md_content),
+            images=final_images,
+            image_map={img.image_id: str(img.saved_path) for img in final_images},
+            metadata={
+                "parser": "mineru",
+                "version": "2.0+",
+                "backend": "pipeline"
+            }
+        )
+        
+        console.print(f"[green]✓[/green] MinerU parsing complete")
+        console.print(f"  - Content: {len(md_content):,} characters")
+        console.print(f"  - Images: {len(final_images)} extracted")
         
         return doc_data
     

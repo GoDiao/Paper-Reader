@@ -34,6 +34,9 @@ data/reports.json
 data/reports.json.bak
 *.pdf
 
+# MinerU (external parser cache: models / checkpoints)
+MinerU/ckpt/
+
 # IDEs
 .vscode/
 .idea/
