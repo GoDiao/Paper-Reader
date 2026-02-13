@@ -61,8 +61,8 @@ Be specific about page numbers, section names, and what to focus on.
   }},
   
   "data_auditor_task": {{
-    "sections": ["Experiments", "Results"],
-    "focus": "Describe what metrics and comparisons to analyze",
+    "sections": ["Experiments", "Results", "Introduction", "Conclusion", "Abstract"],
+    "focus": "Describe what metrics and comparisons to analyze, also check for code/data availability statements",
     "key_tables": ["Table 1: Main results"],
     "baselines_to_compare": ["Previous SOTA method names"]
   }}
@@ -149,9 +149,9 @@ $$
 $$
 
 **Variable Definitions:**
-| Symbol | Meaning | Dimension/Type |
-|--------|---------|----------------|
-| $x$ | Input signal | $\mathbb{{R}}^n$ |
+| Symbol | Meaning | Dimension/Type | Default Value |
+|--------|---------|----------------|---------------|
+| $x$ | Input signal | $\mathbb{{R}}^n$ | - |
 
 **Step-by-Step Derivation:**
 1. Starting from [known principle/equation]...
@@ -166,6 +166,28 @@ $$
 [How does this relate to known algorithms like Kalman Filter, Adam optimizer, Transformer attention, etc.?]
 
 ---
+
+### 📊 Complete Variable Tracking Table
+
+After analyzing all equations, provide a CONSOLIDATED variable table:
+
+| Symbol | Name | Definition | First Appearance | Typical Value | Dependencies |
+|--------|------|------------|------------------|---------------|--------------|
+| $\\alpha$ | Learning rate | Controls gradient step size | Eq. (5) | 0.001 | - |
+| $L$ | Loss function | Training objective | Eq. (3) | - | $y$, $\\hat{{y}}$, $N$ |
+| ... | ... | ... | ... | ... | ... |
+
+**Important**: Include ALL variables that appear in the paper's equations, even those defined in text.
+
+### 🔗 Variable Dependency Graph
+
+Describe how variables depend on each other in a tree format:
+```
+[Root Variable]
+  ├── [Dependent Variable 1]
+  │     └── [Sub-dependency]
+  └── [Dependent Variable 2]
+```
 
 ### 🏗️ Algorithm/Architecture Analysis
 [If there's a novel architecture in Figure X, explain each component]
@@ -185,13 +207,24 @@ Your principles:
 2. Look for statistical significance and variance
 3. Check if comparisons are fair (same settings, datasets, metrics)
 4. Identify potential weaknesses in experimental design
+5. **Scan Introduction, Conclusion, and Abstract for code/data availability links**
+6. Extract ALL reproduction resources: GitHub URLs, project pages, model weights, datasets
 """
 
 DATA_AUDITOR_PROMPT = """## Your Assignment from the Architect
 {task_assignment}
 
-## Experiments Section Content
+## Paper Content (Experiments, Introduction, Conclusion, Abstract)
 {content}
+
+**IMPORTANT**: You receive multiple sections including Introduction, Conclusion, and Abstract. 
+These sections often contain:
+- Code availability statements (e.g., "Code is available at github.com/...")
+- Dataset release information
+- Link to project page
+- Model weights availability
+
+Please scan ALL provided sections for code/data availability information.
 
 ## Your Audit Report Template
 
@@ -223,6 +256,56 @@ DATA_AUDITOR_PROMPT = """## Your Assignment from the Architect
 
 ### ⚡ Efficiency Analysis
 [Speed/memory comparisons if available]
+
+---
+
+### 🔧 Reproduction Checklist
+
+Generate a comprehensive checklist for reproducing this paper:
+
+#### 📦 Datasets Required
+For each dataset mentioned, extract:
+| Dataset | Size | Access | Download Link | Notes |
+|---------|------|--------|---------------|-------|
+| [Name] | [samples/classes] | [Public/Request needed] | [URL if mentioned] | [Preprocessing notes] |
+
+#### ⚙️ Hyperparameters
+Extract ALL hyperparameters mentioned in the paper:
+| Parameter | Value | Location | Reproducibility |
+|-----------|-------|----------|-----------------|
+| Learning Rate | [value] | [Section/Table] | [✅ Explicit / ⚠️ Inferred] |
+| Batch Size | [value] | [Section/Table] | [✅ Explicit / ⚠️ Inferred] |
+| Epochs | [value] | [Section/Table] | [✅ Explicit / ⚠️ Inferred] |
+| Optimizer | [name] | [Section] | [✅ Explicit] |
+| ... | ... | ... | ... |
+
+Include: training params (lr, batch, epochs, optimizer, weight decay), model params (hidden dim, layers, heads, dropout), data params (augmentation, image size, sequence length).
+
+#### 💻 Hardware Requirements
+| Resource | Requirement | Location |
+|----------|-------------|----------|
+| GPU | [Model × Count] | [Section] |
+| Memory | [GB] | [Section/Implied] |
+| Training Time | [hours/days] | [Section] |
+
+#### 🔗 Code Availability
+| Resource | Status | Link |
+|----------|--------|------|
+| Official Code | [✅ Available / ❓ Not mentioned / ❌ Not released] | [URL if available] |
+| Model Weights | [✅ Available / ❓ Not mentioned] | [URL if available] |
+| GitHub Search | 🔍 | https://github.com/search?q=[paper_title] |
+| HuggingFace | 🔍 | https://huggingface.co/models?search=[paper_title] |
+
+#### ⚠️ Reproduction Risk Assessment
+Rate each risk factor as 🟢 Low / 🟡 Medium / 🔴 High:
+| Risk | Level | Reason |
+|------|-------|--------|
+| Dataset Access | [Level] | [Why] |
+| Compute Requirements | [Level] | [Why] |
+| Missing Details | [Level] | [What's missing] |
+| Random Seed | [Level] | [Specified or not] |
+
+---
 
 ### ⚠️ Potential Concerns
 [Any limitations, unfair comparisons, or missing experiments?]

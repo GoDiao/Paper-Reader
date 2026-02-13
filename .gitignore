@@ -47,3 +47,4 @@ plans/
 *.log
 tmp/
 .ipynb_checkpoints/
+verify_search.py

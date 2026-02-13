@@ -205,6 +205,14 @@ paper_reader/
 
 ## 🚀 Changelog
 
+### v1.5.0 - UI Modernization & Resource Discovery
+
+- **🎨 Modern UI Overhaul**: Complete redesign with a new Zinc-based dark theme, high-contrast tables for better readability, and refined typography.
+- **🔍 Resource Discovery Services**: Integrated automated search for reproduction resources (GitHub code repositories, HuggingFace models/datasets) directly into the analysis pipeline.
+- **📋 Reproduction Checklist**: New dedicated section to extract and verify hardware requirements, hyperparameters, and datasets.
+- **📉 Variable Tracking**: Added support for tracking mathematical variables and their definitions across the paper.
+- **⚡ UX Refinements**: Streamlined the agent progress view by removing the redundant Architect tab, focusing on the specialist analysis.
+
 ### v1.3.0 - MinerU Parsing Upgrade
 
 - **🧠 MinerU Parser Backend**: Integrated MinerU (Magic-PDF 2.x pipeline) as a high-fidelity PDF parser for complex academic papers, with better layout, table, and math structure preservation.

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +9,7 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -18,7 +18,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
     
     <!-- Syntax Highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     
     <!-- KaTeX for Math -->
@@ -26,7 +26,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
     
-    <link rel="stylesheet" href="/static/styles.css?v=3">
+    <link rel="stylesheet" href="/static/styles.css?v=7">
 </head>
 <body>
     <!-- Header -->
@@ -37,6 +37,9 @@
                 <span>Paper Reader</span>
             </div>
             <nav class="nav-buttons">
+                <button id="themeToggleBtn" class="nav-btn" title="Switch Theme">
+                    <i class="fas fa-moon"></i>
+                </button>
                 <button id="langToggleBtn" class="nav-btn" title="Switch Language">
                     <i class="fas fa-globe"></i>
                     <span id="langLabel">EN</span>
@@ -121,6 +124,13 @@
                                 <option value="pymupdf">PyMuPDF (Fast)</option>
                             </select>
                         </div>
+                        <div class="setting-item setting-item-full">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="enableWebSearch">
+                                <span data-i18n="enable_web_search">Enable Web Search</span>
+                            </label>
+                            <p class="setting-hint" data-i18n="enable_web_search_hint">Search GitHub/HuggingFace for reproduction resources (code, models, datasets)</p>
+                        </div>
                     </div>
                     <button id="startAnalysisBtn" class="btn btn-primary btn-large">
                         <i class="fas fa-play"></i> <span data-i18n="start_analysis">Start Analysis</span>
@@ -148,17 +158,6 @@
                     </div>
                     
                     <!-- Phase 2: Analysis -->
-                    <div class="progress-step" data-phase="analysis" data-agent="architect">
-                        <div class="step-icon">
-                            <i class="fas fa-drafting-compass"></i>
-                        </div>
-                        <div class="step-content">
-                            <div class="step-title">Architect</div>
-                            <div class="step-status" data-i18n="waiting">Waiting...</div>
-                        </div>
-                        <div class="step-indicator"></div>
-                    </div>
-                    
                     <div class="progress-step" data-phase="analysis" data-agent="context_hunter">
                         <div class="step-icon">
                             <i class="fas fa-search"></i>
@@ -229,9 +228,6 @@
                 </div>
                 <div class="specialist-content" id="specialistContent">
                     <div class="specialist-tabs">
-                        <button class="specialist-tab-btn" data-specialist="architect">
-                            <i class="fas fa-drafting-compass"></i> Architect
-                        </button>
                         <button class="specialist-tab-btn active" data-specialist="context_hunter">
                             <i class="fas fa-search"></i> Context Hunter
                         </button>
@@ -243,10 +239,92 @@
                         </button>
                     </div>
                     <div class="specialist-report-content">
-                        <div class="specialist-report" data-specialist="architect"></div>
                         <div class="specialist-report active" data-specialist="context_hunter"></div>
                         <div class="specialist-report" data-specialist="math_specialist"></div>
                         <div class="specialist-report" data-specialist="data_auditor"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- P0 Features: Variable Tracking & Reproduction Checklist -->
+            <div id="p0FeaturesSection" class="p0-features-section hidden">
+                <!-- Variable Tracking Panel -->
+                <div id="variableTrackingPanel" class="feature-panel hidden">
+                    <div class="feature-header" id="variableToggle">
+                        <div class="feature-title">
+                            <i class="fas fa-superscript"></i>
+                            <span data-i18n="variable_tracking">Variable Tracking</span>
+                            <span class="feature-count" id="variableCount"></span>
+                        </div>
+                        <i class="fas fa-chevron-down feature-chevron"></i>
+                    </div>
+                    <div class="feature-content" id="variableContent">
+                        <div class="variable-search">
+                            <input type="text" id="variableSearch" placeholder="Search variables..." data-i18n-placeholder="search_variables">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div id="variableTable" class="variable-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Symbol</th>
+                                        <th>Name</th>
+                                        <th>Definition</th>
+                                        <th>Location</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="variableTableBody">
+                                    <!-- Variables will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="dependencyGraph" class="dependency-graph hidden">
+                            <h4><i class="fas fa-project-diagram"></i> Dependency Graph</h4>
+                            <pre id="dependencyGraphContent"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reproduction Checklist Panel -->
+                <div id="reproductionChecklistPanel" class="feature-panel hidden">
+                    <div class="feature-header" id="checklistToggle">
+                        <div class="feature-title">
+                            <i class="fas fa-tasks"></i>
+                            <span data-i18n="reproduction_checklist">Reproduction Checklist</span>
+                        </div>
+                        <i class="fas fa-chevron-down feature-chevron"></i>
+                    </div>
+                    <div class="feature-content" id="checklistContent">
+                        <!-- Datasets -->
+                        <div class="checklist-section" id="datasetsSection">
+                            <h4><i class="fas fa-database"></i> <span data-i18n="datasets">Datasets</span></h4>
+                            <div id="datasetsTable" class="checklist-table"></div>
+                        </div>
+                        
+                        <!-- Hyperparameters -->
+                        <div class="checklist-section" id="hyperparametersSection">
+                            <h4><i class="fas fa-sliders-h"></i> <span data-i18n="hyperparameters">Hyperparameters</span></h4>
+                            <div id="hyperparametersTable" class="checklist-table"></div>
+                        </div>
+                        
+                        <!-- Hardware -->
+                        <div class="checklist-section" id="hardwareSection">
+                            <h4><i class="fas fa-microchip"></i> <span data-i18n="hardware">Hardware Requirements</span></h4>
+                            <div id="hardwareTable" class="checklist-table"></div>
+                        </div>
+                        
+                        <!-- Code Availability -->
+                        <div class="checklist-section" id="codeSection">
+                            <h4><i class="fas fa-code"></i> <span data-i18n="code_availability">Code Availability</span></h4>
+                            <div id="codeAvailabilityContent" class="code-availability"></div>
+                        </div>
+                        
+                        <!-- Risk Assessment -->
+                        <div class="checklist-section" id="riskSection">
+                            <h4><i class="fas fa-exclamation-triangle"></i> <span data-i18n="risk_assessment">Risk Assessment</span></h4>
+                            <div id="riskTable" class="risk-table"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -284,8 +362,6 @@
                         <i class="fas fa-copy"></i> <span data-i18n="copy">Copy</span>
                     </button>
                 </div>
-                
-
                 
                 <!-- Report Content -->
                 <div id="reportContent" class="report-content">
@@ -347,6 +423,6 @@
         </div>
     </div>
 
-    <script src="/static/scripts.js?v=12"></script>
+    <script src="/static/scripts.js?v=13"></script>
 </body>
 </html>

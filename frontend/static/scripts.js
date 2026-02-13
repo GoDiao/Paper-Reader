@@ -15,7 +15,8 @@ const state = {
     reports: { english: '', chinese: '' },
     specialistReports: {},
     currentLang: 'en',
-    uiLang: localStorage.getItem('uiLang') || 'en'  // UI language preference
+    uiLang: localStorage.getItem('uiLang') || 'en',  // UI language preference
+    theme: localStorage.getItem('uiTheme') || 'dark'  // Theme preference
 };
 
 // Internationalization translations
@@ -36,6 +37,10 @@ const translations = {
         mode_simple: 'Simple (Dual Role)',
         llm_provider: 'LLM Provider',
         model: 'Model',
+        parser_backend: 'Parser Backend',
+        parser_auto: 'Auto (Default)',
+        enable_web_search: 'Enable Web Search',
+        enable_web_search_hint: 'Search GitHub/HuggingFace for reproduction resources (code, models, datasets)',
         start_analysis: 'Start Analysis',
 
         // Progress
@@ -89,6 +94,10 @@ const translations = {
         mode_simple: '简单模式 (双角色)',
         llm_provider: 'LLM 提供商',
         model: '模型',
+        parser_backend: '解析后端',
+        parser_auto: '自动 (默认)',
+        enable_web_search: '启用网络搜索',
+        enable_web_search_hint: '搜索 GitHub/HuggingFace 获取复现资源（代码、模型、数据集）',
         start_analysis: '开始分析',
 
         // Progress
@@ -159,6 +168,7 @@ const elements = {
     llmProvider: document.getElementById('llmProvider'),
     llmModel: document.getElementById('llmModel'),
     parserBackend: document.getElementById('parserBackend'),
+    enableWebSearch: document.getElementById('enableWebSearch'),
 
     // Analysis
     analysisSection: document.getElementById('analysisSection'),
@@ -196,6 +206,7 @@ const elements = {
 
 document.addEventListener('DOMContentLoaded', () => {
     initI18n();  // Initialize language system first
+    initTheme();  // Initialize theme system
     initUpload();
     initTabs();
     initExport();
@@ -266,6 +277,43 @@ function applyLanguage(lang) {
             el.textContent = t[key];
         }
     });
+}
+
+// ============================================
+// Theme Management
+// ============================================
+
+function initTheme() {
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+
+    // Apply saved theme on load
+    applyTheme(state.theme);
+
+    // Toggle theme on button click
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', () => {
+            state.theme = state.theme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('uiTheme', state.theme);
+            applyTheme(state.theme);
+        });
+    }
+}
+
+function applyTheme(theme) {
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
+    const themeIcon = themeToggleBtn ? themeToggleBtn.querySelector('i') : null;
+
+    // Set theme attribute on document
+    document.documentElement.setAttribute('data-theme', theme);
+
+    // Update button icon
+    if (themeIcon) {
+        if (theme === 'light') {
+            themeIcon.className = 'fas fa-sun';
+        } else {
+            themeIcon.className = 'fas fa-moon';
+        }
+    }
 }
 
 // ============================================
@@ -443,6 +491,7 @@ function connectWebSocket() {
         console.log('WebSocket connected');
 
         // Send analysis request
+        const enableWebSearch = elements.enableWebSearch ? elements.enableWebSearch.checked : false;
         state.websocket.send(JSON.stringify({
             type: 'analyze',
             upload_id: state.uploadId,
@@ -450,7 +499,8 @@ function connectWebSocket() {
             provider: elements.llmProvider.value,
             model: elements.llmModel.value,
             verbose: false,
-            parser: elements.parserBackend ? elements.parserBackend.value : 'auto'
+            parser: elements.parserBackend ? elements.parserBackend.value : 'auto',
+            enable_web_search: enableWebSearch
         }));
     };
 
@@ -505,16 +555,8 @@ function handleArchitectPlan(data) {
         toggle.classList.add('expanded');
     }
 
-    // Format plan as Markdown
-    const markdown = formatArchitectPlan(plan);
-    state.specialistReports['architect'] = markdown;
-
-    // Render
-    renderSingleSpecialistReport('architect', markdown);
-
-    // Switch to architect tab
-    const tabBtn = document.querySelector(`.specialist-tab-btn[data-specialist="architect"]`);
-    if (tabBtn) tabBtn.click();
+    // Architect UI removed per user request
+    // We just ensure the section is visible for other agents
 }
 
 function formatArchitectPlan(plan) {
@@ -769,6 +811,11 @@ function handleAnalysisComplete(data) {
         renderSpecialistReports(metadata.specialist_reports);
     }
 
+    // Render P0 features: Variable Tracking and Reproduction Checklist
+    if (metadata.variable_tracking || metadata.reproduction_checklist) {
+        renderP0Features(metadata.variable_tracking, metadata.reproduction_checklist);
+    }
+
     // Show chat section
     elements.chatSection.classList.remove('hidden');
 
@@ -1016,6 +1063,230 @@ function renderSpecialistReports(specialistReports) {
 
     // Show the section
     section.classList.remove('hidden');
+}
+
+// ============================================
+// P0 Features: Variable Tracking & Reproduction Checklist
+// ============================================
+
+function renderP0Features(variableTracking, reproductionChecklist) {
+    const p0Section = document.getElementById('p0FeaturesSection');
+    if (!p0Section) return;
+
+    // Show the P0 features section
+    p0Section.classList.remove('hidden');
+
+    // Render Variable Tracking
+    if (variableTracking && variableTracking.variables && variableTracking.variables.length > 0) {
+        renderVariableTracking(variableTracking);
+    }
+
+    // Render Reproduction Checklist
+    if (reproductionChecklist) {
+        renderReproductionChecklist(reproductionChecklist);
+    }
+}
+
+function renderVariableTracking(data) {
+    const panel = document.getElementById('variableTrackingPanel');
+    if (!panel) return;
+
+    panel.classList.remove('hidden');
+
+    // Update count badge
+    const countBadge = document.getElementById('variableCount');
+    if (countBadge) {
+        countBadge.textContent = `(${data.variables.length})`;
+    }
+
+    // Render variable table
+    const tbody = document.getElementById('variableTableBody');
+    if (tbody && data.variables) {
+        tbody.innerHTML = data.variables.map(v => `
+            <tr>
+                <td>${escapeHtml(v.symbol || '')}</td>
+                <td>${escapeHtml(v.name || '')}</td>
+                <td>${escapeHtml(v.definition || '')}</td>
+                <td>${escapeHtml(v.location || '')}</td>
+                <td>${escapeHtml(v.value || '-')}</td>
+            </tr>
+        `).join('');
+    }
+
+    // Render dependency graph
+    const graphContainer = document.getElementById('dependencyGraph');
+    const graphContent = document.getElementById('dependencyGraphContent');
+    if (graphContainer && graphContent && data.dependency_graph) {
+        graphContainer.classList.remove('hidden');
+        graphContent.textContent = data.dependency_graph;
+    }
+
+    // Setup toggle
+    const toggle = document.getElementById('variableToggle');
+    const content = document.getElementById('variableContent');
+    if (toggle && content) {
+        toggle.addEventListener('click', () => {
+            toggle.classList.toggle('expanded');
+            content.classList.toggle('expanded');
+        });
+        // Auto-expand by default
+        toggle.classList.add('expanded');
+        content.classList.add('expanded');
+    }
+
+    // Setup search
+    const searchInput = document.getElementById('variableSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    }
+}
+
+function renderReproductionChecklist(data) {
+    const panel = document.getElementById('reproductionChecklistPanel');
+    if (!panel) return;
+
+    panel.classList.remove('hidden');
+
+    // Render datasets
+    if (data.datasets && data.datasets.length > 0) {
+        renderChecklistTable('datasetsTable', data.datasets, ['dataset', 'size', 'access', 'download_link', 'notes']);
+    }
+
+    // Render hyperparameters
+    if (data.hyperparameters && data.hyperparameters.length > 0) {
+        renderChecklistTable('hyperparametersTable', data.hyperparameters, ['parameter', 'value', 'location', 'reproducibility']);
+    }
+
+    // Render hardware
+    if (data.hardware && data.hardware.length > 0) {
+        renderChecklistTable('hardwareTable', data.hardware, ['resource', 'requirement', 'location']);
+    }
+
+    // Render code availability
+    if (data.code_availability && Object.keys(data.code_availability).length > 0) {
+        renderCodeAvailability(data.code_availability);
+    }
+
+    // Render risk assessment
+    if (data.risk_assessment && data.risk_assessment.length > 0) {
+        renderRiskAssessment(data.risk_assessment);
+    }
+
+    // Setup toggle
+    const toggle = document.getElementById('checklistToggle');
+    const content = document.getElementById('checklistContent');
+    if (toggle && content) {
+        toggle.addEventListener('click', () => {
+            toggle.classList.toggle('expanded');
+            content.classList.toggle('expanded');
+        });
+        // Auto-expand by default
+        toggle.classList.add('expanded');
+        content.classList.add('expanded');
+    }
+}
+
+function renderChecklistTable(containerId, data, columns) {
+    const container = document.getElementById(containerId);
+    if (!container || !data || data.length === 0) return;
+
+    // Generate header labels from column names
+    const headerLabels = columns.map(c => c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+
+    let html = '<table><thead><tr>';
+    headerLabels.forEach(label => {
+        html += `<th>${label}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    data.forEach(row => {
+        html += '<tr>';
+        columns.forEach(col => {
+            const value = row[col] || '-';
+            html += `<td>${escapeHtml(value)}</td>`;
+        });
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function renderCodeAvailability(data) {
+    const container = document.getElementById('codeAvailabilityContent');
+    if (!container) return;
+
+    let html = '';
+    Object.entries(data).forEach(([key, info]) => {
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const status = info.status || '';
+        const link = info.link || '';
+
+        let statusClass = 'unknown';
+        let statusIcon = 'fa-question-circle';
+        if (status.includes('✅') || status.toLowerCase().includes('available')) {
+            statusClass = 'available';
+            statusIcon = 'fa-check-circle';
+        } else if (status.includes('❌') || status.toLowerCase().includes('not')) {
+            statusClass = 'unavailable';
+            statusIcon = 'fa-times-circle';
+        } else if (status.includes('🔍')) {
+            statusClass = 'unknown';
+            statusIcon = 'fa-search';
+        }
+
+        html += `
+            <div class="code-availability-item">
+                <span class="label">${label}</span>
+                <span class="status ${statusClass}">
+                    <i class="fas ${statusIcon}"></i>
+                    ${escapeHtml(status)}
+                    ${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener">Link</a>` : ''}
+                </span>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function renderRiskAssessment(data) {
+    const container = document.getElementById('riskTable');
+    if (!container || !data || data.length === 0) return;
+
+    let html = '<table><thead><tr><th>Risk</th><th>Level</th><th>Reason</th></tr></thead><tbody>';
+
+    data.forEach(row => {
+        const level = (row.level || 'unknown').toLowerCase();
+        const levelClass = level.includes('low') || level.includes('🟢') ? 'low' :
+                          level.includes('medium') || level.includes('🟡') ? 'medium' :
+                          level.includes('high') || level.includes('🔴') ? 'high' : 'unknown';
+
+        html += `
+            <tr>
+                <td>${escapeHtml(row.risk || row.name || '-')}</td>
+                <td><span class="risk-level ${levelClass}">${escapeHtml(row.level || '-')}</span></td>
+                <td>${escapeHtml(row.reason || '-')}</td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 

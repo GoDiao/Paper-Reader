@@ -169,12 +169,66 @@ class OutputConfig(BaseModel):
         return self.output_dir / self.report_filename
 
 
+class WebSearchConfig(BaseModel):
+    """Web Search Configuration for Reproduction Resources"""
+    
+    enable_web_search: bool = Field(
+        default=False,
+        description="Enable web search for reproduction resources"
+    )
+    
+    github_token: Optional[str] = Field(
+        default=None,
+        description="GitHub Personal Access Token for higher rate limits"
+    )
+    
+    huggingface_token: Optional[str] = Field(
+        default=None,
+        description="HuggingFace API token for accessing private resources"
+    )
+    
+    serper_api_key: Optional[str] = Field(
+        default=None,
+        description="Serper API key for Google search (optional)"
+    )
+    
+    def get_github_token(self) -> Optional[str]:
+        """Get GitHub token from config or environment"""
+        if self.github_token:
+            return self.github_token
+        return os.getenv("GITHUB_TOKEN")
+    
+    def get_huggingface_token(self) -> Optional[str]:
+        """Get HuggingFace token from config or environment"""
+        if self.huggingface_token:
+            return self.huggingface_token
+        return os.getenv("HUGGINGFACE_TOKEN")
+    
+    def get_serper_api_key(self) -> Optional[str]:
+        """Get Serper API key from config or environment"""
+        if self.serper_api_key:
+            return self.serper_api_key
+        return os.getenv("SERPER_API_KEY")
+    
+    def is_enabled(self) -> bool:
+        """Check if web search is effectively enabled"""
+        if not self.enable_web_search:
+            return False
+        # Web search is enabled if we have at least one token
+        return bool(
+            self.get_github_token() or 
+            self.get_huggingface_token() or 
+            self.get_serper_api_key()
+        )
+
+
 class AppConfig(BaseModel):
     """Main Application Configuration"""
     
     llm: LLMConfig = Field(default_factory=LLMConfig)
     parser: ParserConfig = Field(default_factory=ParserConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    web_search: WebSearchConfig = Field(default_factory=WebSearchConfig)
     
     @classmethod
     def from_args(
@@ -182,7 +236,8 @@ class AppConfig(BaseModel):
         provider: str = "deepseek",
         model: Optional[str] = None,
         output_dir: str = "./output",
-        use_gpu: bool = True
+        use_gpu: bool = True,
+        enable_web_search: bool = False
     ) -> "AppConfig":
         """Create config from command line arguments"""
         
@@ -193,7 +248,8 @@ class AppConfig(BaseModel):
         return cls(
             llm=LLMConfig(provider=provider, model=model),
             parser=ParserConfig(use_gpu=use_gpu),
-            output=OutputConfig(output_dir=Path(output_dir))
+            output=OutputConfig(output_dir=Path(output_dir)),
+            web_search=WebSearchConfig(enable_web_search=enable_web_search)
         )
 
 

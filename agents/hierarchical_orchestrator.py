@@ -60,6 +60,25 @@ class SpecialistReport:
 
 
 @dataclass
+class VariableTracking:
+    """Variable tracking information extracted from math report"""
+    variables: List[Dict] = field(default_factory=list)  # List of variable definitions
+    dependency_graph: str = ""  # Text representation of dependency graph
+    raw_section: str = ""  # Raw markdown section
+
+
+@dataclass
+class ReproductionChecklist:
+    """Reproduction checklist extracted from experiment report"""
+    datasets: List[Dict] = field(default_factory=list)  # Dataset info
+    hyperparameters: List[Dict] = field(default_factory=list)  # Hyperparameter settings
+    hardware: List[Dict] = field(default_factory=list)  # Hardware requirements
+    code_availability: Dict = field(default_factory=dict)  # Code/model availability
+    risk_assessment: List[Dict] = field(default_factory=list)  # Risk factors
+    raw_section: str = ""  # Raw markdown section
+
+
+@dataclass
 class HierarchicalAnalysisResult:
     """Complete analysis result from hierarchical pipeline"""
     title: str = ""
@@ -71,6 +90,9 @@ class HierarchicalAnalysisResult:
     final_report: str = ""
     final_report_chinese: str = ""  # Chinese version
     figure_suggestions: Dict[str, str] = field(default_factory=dict)
+    # New fields for P0 features
+    variable_tracking: Optional[VariableTracking] = None
+    reproduction_checklist: Optional[ReproductionChecklist] = None
 
 
 class HierarchicalOrchestrator:
@@ -214,6 +236,10 @@ class HierarchicalOrchestrator:
             result.context_report = specialist_reports.get("context_hunter", "")
             result.math_report = specialist_reports.get("math_specialist", "")
             result.experiment_report = specialist_reports.get("data_auditor", "")
+            
+            # Extract P0 features: Variable Tracking and Reproduction Checklist
+            result.variable_tracking = self._extract_variable_tracking(result.math_report)
+            result.reproduction_checklist = self._extract_reproduction_checklist(result.experiment_report)
             
             # Emit progress: Specialists completed
             if progress_callback:
@@ -419,7 +445,7 @@ class HierarchicalOrchestrator:
             default_sections = {
                 "context_hunter": ["Introduction", "Related Work", "Background"],
                 "math_specialist": ["Method", "Approach", "Methodology", "Model"],
-                "data_auditor": ["Experiments", "Results", "Evaluation", "Analysis"]
+                "data_auditor": ["Experiments", "Results", "Evaluation", "Analysis", "Introduction", "Conclusion", "Abstract"]
             }
             
             plan.context_hunter_task = {"sections": default_sections["context_hunter"]}
@@ -813,6 +839,165 @@ class HierarchicalOrchestrator:
             suggestions[fig_id] = desc
         
         return suggestions
+    
+    def _extract_variable_tracking(self, math_report: str) -> Optional['VariableTracking']:
+        """
+        Extract variable tracking information from math specialist report.
+        
+        Parses the "Complete Variable Tracking Table" section and dependency graph.
+        """
+        if not math_report:
+            return None
+        
+        tracking = VariableTracking()
+        
+        # Extract the variable tracking table section
+        # Pattern: ### 📊 Complete Variable Tracking Table ... until next ### or end
+        table_pattern = r'### 📊 Complete Variable Tracking Table\s*\n(.*?)(?=\n###|\n##|\Z)'
+        table_match = re.search(table_pattern, math_report, re.DOTALL)
+        
+        if table_match:
+            tracking.raw_section = table_match.group(0)
+            table_content = table_match.group(1)
+            
+            # Parse markdown table rows
+            # | Symbol | Name | Definition | First Appearance | Typical Value | Dependencies |
+            row_pattern = r'\|\s*\$?([^$|]*)\$?\s*\|\s*([^|]*)\|\s*([^|]*)\|\s*([^|]*)\|\s*([^|]*)\|\s*([^|]*)\|'
+            rows = re.findall(row_pattern, table_content)
+            
+            for row in rows:
+                # Skip header and separator rows
+                if row[0].strip().startswith('-') or row[0].strip().lower() == 'symbol':
+                    continue
+                
+                var = {
+                    'symbol': row[0].strip(),
+                    'name': row[1].strip(),
+                    'definition': row[2].strip(),
+                    'location': row[3].strip(),
+                    'value': row[4].strip(),
+                    'dependencies': row[5].strip()
+                }
+                if var['symbol']:  # Only add if symbol is not empty
+                    tracking.variables.append(var)
+        
+        # Extract dependency graph section
+        graph_pattern = r'### 🔗 Variable Dependency Graph\s*\n```(?:[^\n]*)?\n(.*?)```'
+        graph_match = re.search(graph_pattern, math_report, re.DOTALL)
+        
+        if graph_match:
+            tracking.dependency_graph = graph_match.group(1).strip()
+        else:
+            # Try alternative format (text description)
+            graph_pattern2 = r'### 🔗 Variable Dependency Graph\s*\n(.*?)(?=\n###|\n##|\Z)'
+            graph_match2 = re.search(graph_pattern2, math_report, re.DOTALL)
+            if graph_match2:
+                tracking.dependency_graph = graph_match2.group(1).strip()
+        
+        return tracking if tracking.variables or tracking.dependency_graph else None
+    
+    def _extract_reproduction_checklist(self, experiment_report: str) -> Optional['ReproductionChecklist']:
+        """
+        Extract reproduction checklist from data auditor report.
+        
+        Parses datasets, hyperparameters, hardware, code availability, and risk assessment.
+        """
+        if not experiment_report:
+            return None
+        
+        checklist = ReproductionChecklist()
+        
+        # Extract the reproduction checklist section
+        checklist_pattern = r'### 🔧 Reproduction Checklist\s*\n(.*?)(?=\n### ⚠️ Potential Concerns|\n##|\Z)'
+        checklist_match = re.search(checklist_pattern, experiment_report, re.DOTALL)
+        
+        if checklist_match:
+            checklist.raw_section = checklist_match.group(0)
+            content = checklist_match.group(1)
+            
+            # Extract datasets
+            checklist.datasets = self._parse_checklist_table(content, '📦 Datasets Required')
+            
+            # Extract hyperparameters
+            checklist.hyperparameters = self._parse_checklist_table(content, '⚙️ Hyperparameters')
+            
+            # Extract hardware
+            checklist.hardware = self._parse_checklist_table(content, '💻 Hardware Requirements')
+            
+            # Extract code availability
+            checklist.code_availability = self._parse_code_availability(content)
+            
+            # Extract risk assessment
+            checklist.risk_assessment = self._parse_checklist_table(content, '⚠️ Reproduction Risk Assessment')
+        
+        return checklist if (checklist.datasets or checklist.hyperparameters or 
+                            checklist.hardware or checklist.risk_assessment) else None
+    
+    def _parse_checklist_table(self, content: str, section_title: str) -> List[Dict]:
+        """Parse a markdown table from a specific section of the checklist."""
+        results = []
+        
+        # Find the section
+        section_pattern = rf'#### {re.escape(section_title)}\s*\n(.*?)(?=\n####|\n###|\Z)'
+        section_match = re.search(section_pattern, content, re.DOTALL)
+        
+        if not section_match:
+            return results
+        
+        section_content = section_match.group(1)
+        
+        # Parse table rows
+        lines = section_content.strip().split('\n')
+        headers = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('---'):
+                continue
+            
+            # Check if it's a header row
+            if line.startswith('|') and not headers:
+                headers = [h.strip() for h in line.split('|')[1:-1]]
+                continue
+            
+            # Parse data row
+            if line.startswith('|') and headers:
+                cells = [c.strip() for c in line.split('|')[1:-1]]
+                if cells and not all(c.startswith('-') for c in cells):
+                    row_dict = {}
+                    for i, header in enumerate(headers):
+                        if i < len(cells):
+                            row_dict[header.lower().replace(' ', '_')] = cells[i]
+                    if row_dict:
+                        results.append(row_dict)
+        
+        return results
+    
+    def _parse_code_availability(self, content: str) -> Dict:
+        """Parse code availability section."""
+        result = {}
+        
+        section_pattern = r'#### 🔗 Code Availability\s*\n(.*?)(?=\n####|\n###|\Z)'
+        section_match = re.search(section_pattern, content, re.DOTALL)
+        
+        if section_match:
+            section_content = section_match.group(1)
+            
+            # Parse table
+            lines = section_content.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith('|') and '---' in line:
+                    continue
+                if line.startswith('|'):
+                    cells = [c.strip() for c in line.split('|')[1:-1]]
+                    if len(cells) >= 2 and not cells[0].startswith('-'):
+                        key = cells[0].lower().replace(' ', '_')
+                        status = cells[1] if len(cells) > 1 else ''
+                        link = cells[2] if len(cells) > 2 else ''
+                        result[key] = {'status': status, 'link': link}
+        
+        return result
 
 
 # Convenience function for simple usage

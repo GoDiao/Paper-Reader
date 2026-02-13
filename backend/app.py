@@ -39,7 +39,8 @@ from backend.websocket_manager import ProgressCallback
 from parsers.pdf_parser import PDFParser
 from agents.hierarchical_orchestrator import HierarchicalOrchestrator
 from generators.report_generator import ReportGenerator
-from config import LLMConfig
+from config import LLMConfig, WebSearchConfig
+from services.resource_finder import ResourceFinder
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -203,7 +204,8 @@ async def run_analysis(
     provider: str,
     model: str,
     verbose: bool,
-    parser_type: str = "auto"
+    parser_type: str = "auto",
+    enable_web_search: bool = None
 ):
     """Background task to run paper analysis with WebSocket updates."""
     try:
@@ -284,6 +286,62 @@ async def run_analysis(
             domain = analysis.domain
             figure_suggestions = analysis.figure_suggestions
             
+            # Extract P0 features
+            variable_tracking = None
+            reproduction_checklist = None
+            
+            if analysis.variable_tracking:
+                variable_tracking = {
+                    "variables": analysis.variable_tracking.variables,
+                    "dependency_graph": analysis.variable_tracking.dependency_graph,
+                    "raw_section": analysis.variable_tracking.raw_section
+                }
+            
+            if analysis.reproduction_checklist:
+                reproduction_checklist = {
+                    "datasets": analysis.reproduction_checklist.datasets,
+                    "hyperparameters": analysis.reproduction_checklist.hyperparameters,
+                    "hardware": analysis.reproduction_checklist.hardware,
+                    "code_availability": analysis.reproduction_checklist.code_availability,
+                    "risk_assessment": analysis.reproduction_checklist.risk_assessment,
+                    "raw_section": analysis.reproduction_checklist.raw_section
+                }
+            
+            # Web search enrichment for reproduction resources
+            # UI toggle overrides env; if not provided, fall back to env
+            if enable_web_search is None:
+                enable_web_search = os.getenv("ENABLE_WEB_SEARCH", "false").lower() == "true"
+            web_search_config = WebSearchConfig(
+                enable_web_search=bool(enable_web_search)
+            )
+            
+            if web_search_config.is_enabled() and reproduction_checklist:
+                try:
+                    logger.info("Running web search for reproduction resources...")
+                    resource_finder = ResourceFinder(
+                        enable_web=True,
+                        github_token=web_search_config.get_github_token(),
+                        huggingface_token=web_search_config.get_huggingface_token()
+                    )
+                    
+                    # Extract dataset names from checklist
+                    dataset_names = [
+                        ds.get("dataset", ds.get("name", ""))
+                        for ds in reproduction_checklist.get("datasets", [])
+                        if ds.get("dataset") or ds.get("name")
+                    ]
+                    
+                    # Enrich checklist with web resources
+                    reproduction_checklist = await resource_finder.enrich_checklist(
+                        checklist=reproduction_checklist,
+                        paper_title=parsed_doc.title or "",
+                        authors=""  # Authors extracted from paper if available
+                    )
+                    
+                    logger.info("Web search enrichment completed")
+                except Exception as e:
+                    logger.warning(f"Web search enrichment failed (non-fatal): {e}")
+            
             # Save specialist reports (always, not just in verbose mode)
             specialists_dir = output_dir / "specialists"
             specialists_dir.mkdir(exist_ok=True)
@@ -361,7 +419,9 @@ async def run_analysis(
                 "upload_id": upload_id,
                 "domain": domain,
                 "figure_suggestions": figure_suggestions,
-                "specialist_reports": specialist_reports
+                "specialist_reports": specialist_reports,
+                "variable_tracking": variable_tracking,
+                "reproduction_checklist": reproduction_checklist
             }
         )
         
@@ -376,7 +436,9 @@ async def run_analysis(
                 "title": parsed_doc.title,
                 "domain": domain,
                 "output_dir": str(output_dir),
-                "specialist_reports": specialist_reports
+                "specialist_reports": specialist_reports,
+                "variable_tracking": variable_tracking,
+                "reproduction_checklist": reproduction_checklist
             }
         )
         
@@ -406,9 +468,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 model = message.get("model", "deepseek-chat")
                 verbose = message.get("verbose", False)
                 parser = message.get("parser", "auto")
+                enable_web_search = message.get("enable_web_search")
                 
                 asyncio.create_task(
-                    run_analysis(upload_id, session_id, mode, provider, model, verbose, parser)
+                    run_analysis(upload_id, session_id, mode, provider, model, verbose, parser, enable_web_search)
                 )
                 
     except WebSocketDisconnect:
