@@ -124,6 +124,13 @@
                                 <option value="pymupdf">PyMuPDF (Fast)</option>
                             </select>
                         </div>
+                        <div class="setting-item">
+                            <label for="outputLanguage" data-i18n="output_language">Output Language</label>
+                            <select id="outputLanguage">
+                                <option value="en" selected data-i18n="language_en">English</option>
+                                <option value="zh" data-i18n="language_zh">Chinese</option>
+                            </select>
+                        </div>
                         <div class="setting-item setting-item-full">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="enableWebSearch">
@@ -192,23 +199,12 @@
                     </div>
                     
                     <!-- Phase 3: Assembly -->
-                    <div class="progress-step" data-phase="assembly" data-agent="editor_english">
+                    <div class="progress-step" data-phase="assembly" data-agent="editor">
                         <div class="step-icon">
                             <i class="fas fa-edit"></i>
                         </div>
                         <div class="step-content">
-                            <div class="step-title">Editor (EN)</div>
-                            <div class="step-status" data-i18n="waiting">Waiting...</div>
-                        </div>
-                        <div class="step-indicator"></div>
-                    </div>
-                    
-                    <div class="progress-step" data-phase="assembly" data-agent="editor_chinese">
-                        <div class="step-icon">
-                            <i class="fas fa-language"></i>
-                        </div>
-                        <div class="step-content">
-                            <div class="step-title">Editor (ZH)</div>
+                            <div class="step-title" data-i18n="step_editor">Editor</div>
                             <div class="step-status" data-i18n="waiting">Waiting...</div>
                         </div>
                         <div class="step-indicator"></div>

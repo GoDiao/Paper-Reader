@@ -67,6 +67,8 @@ class AnalysisRequest(BaseModel):
     model: str = "deepseek-chat"
     verbose: bool = False
     parser: str = "auto"  # "auto", "mineru", "pymupdf"
+    language: str = "en"  # "en" or "zh"
+    enable_web_search: bool = False
 
 
 class ChatRequest(BaseModel):
@@ -205,7 +207,8 @@ async def run_analysis(
     model: str,
     verbose: bool,
     parser_type: str = "auto",
-    enable_web_search: bool = None
+    enable_web_search: bool = None,
+    language: str = "en"
 ):
     """Background task to run paper analysis with WebSocket updates."""
     try:
@@ -274,7 +277,8 @@ async def run_analysis(
                 title=parsed_doc.title,
                 images=parsed_doc.images,
                 figure_index_path=figure_index_path if figure_index_path.exists() else None,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                language=language
             )
             
             # Note: Progress events are now emitted by orchestrator via progress_callback
@@ -283,6 +287,13 @@ async def run_analysis(
             
             report_en = analysis.final_report
             report_zh = analysis.final_report_chinese
+            
+            # Explicitly clear unused report based on language to avoid phantom content
+            if language == 'en':
+                report_zh = ""
+            elif language == 'zh':
+                report_en = ""
+            
             domain = analysis.domain
             figure_suggestions = analysis.figure_suggestions
             
@@ -389,13 +400,15 @@ async def run_analysis(
         
         # English report
         report_path_en = output_dir / "paper_analysis.md"
-        final_report_en = generator.generate(
-            analysis_report=report_en,
-            image_map=parsed_doc.image_map,
-            title=parsed_doc.title,
-            output_path=report_path_en,
-            images_output_dir=images_dir
-        )
+        final_report_en = ""
+        if report_en:
+            final_report_en = generator.generate(
+                analysis_report=report_en,
+                image_map=parsed_doc.image_map,
+                title=parsed_doc.title,
+                output_path=report_path_en,
+                images_output_dir=images_dir
+            )
         
         # Chinese report
         report_path_zh = output_dir / "paper_analysis_zh.md"
@@ -469,9 +482,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 verbose = message.get("verbose", False)
                 parser = message.get("parser", "auto")
                 enable_web_search = message.get("enable_web_search")
+                language = message.get("language", "en")
                 
                 asyncio.create_task(
-                    run_analysis(upload_id, session_id, mode, provider, model, verbose, parser, enable_web_search)
+                    run_analysis(upload_id, session_id, mode, provider, model, verbose, parser, enable_web_search, language)
                 )
                 
     except WebSocketDisconnect:

@@ -158,7 +158,8 @@ class HierarchicalOrchestrator:
         total_pages: int = 0,
         images: List[Any] = None,
         figure_index_path: Optional[Path] = None,  # NEW: Path to figure_index.json
-        progress_callback = None  # NEW: Callback for progress updates
+        progress_callback = None,  # NEW: Callback for progress updates
+        language: str = "en"  # NEW: Output language
     ) -> HierarchicalAnalysisResult:
         """
         Execute the complete hierarchical analysis pipeline.
@@ -172,6 +173,7 @@ class HierarchicalOrchestrator:
             images: List of extracted images
             figure_index_path: Path to figure_index.json for detailed figure info
             progress_callback: Optional callback for WebSocket progress updates
+            language: Output language ("en" or "zh")
             
         Returns:
             HierarchicalAnalysisResult with complete analysis
@@ -230,7 +232,8 @@ class HierarchicalOrchestrator:
                 content=content,
                 reading_plan=result.reading_plan,
                 progress_callback=progress_callback,
-                executor=executor
+                executor=executor,
+                language=language
             )
             
             result.context_report = specialist_reports.get("context_hunter", "")
@@ -247,12 +250,14 @@ class HierarchicalOrchestrator:
                 progress_callback.specialist_completed("math_specialist")
                 progress_callback.specialist_completed("data_auditor")
             
-            console.print("\n[bold]═══ Phase 3: Editor Assembly (Parallel EN/ZH) ═══[/bold]")
+            console.print("\n[bold]═══ Phase 3: Editor Assembly (Single Language) ═══[/bold]")
             
             # Emit progress: Editors started
             if progress_callback:
-                progress_callback.editor_started("english")
-                progress_callback.editor_started("chinese")
+                if language == 'en':
+                    progress_callback.editor_started("english")
+                else:
+                    progress_callback.editor_started("chinese")
             
             # Step 3: Editors assemble final reports in parallel
             # Load figure index for detailed figure information
@@ -266,22 +271,30 @@ class HierarchicalOrchestrator:
                 available_figures=available_figures,
                 title=title,
                 progress_callback=progress_callback,
-                executor=executor
+                executor=executor,
+                language=language
             )
         
-        result.final_report = editor_reports.get("english", "")
-        result.final_report_chinese = editor_reports.get("chinese", "")
-        
-        # Extract figure suggestions from English report
-        result.figure_suggestions = self._extract_figure_suggestions(result.final_report)
+        if language == 'en':
+            result.final_report = editor_reports.get("english", "")
+            # Extract figure suggestions from English report
+            result.figure_suggestions = self._extract_figure_suggestions(result.final_report)
+        else:
+            result.final_report_chinese = editor_reports.get("chinese", "")
+            # Extract figure suggestions from Chinese report
+            result.figure_suggestions = self._extract_figure_suggestions(result.final_report_chinese)
         
         # Emit progress: Editors completed
         if progress_callback:
-            progress_callback.editor_completed("english", len(result.final_report))
-            progress_callback.editor_completed("chinese", len(result.final_report_chinese))
+            if language == 'en':
+                progress_callback.editor_completed("english", len(result.final_report))
+            else:
+                progress_callback.editor_completed("chinese", len(result.final_report_chinese))
         
-        console.print(f"[green]✓[/green] English report assembled ({len(result.final_report):,} chars)")
-        console.print(f"[green]✓[/green] Chinese report assembled ({len(result.final_report_chinese):,} chars)")
+        if language == 'en':
+            console.print(f"[green]✓[/green] English report assembled ({len(result.final_report):,} chars)")
+        else:
+            console.print(f"[green]✓[/green] Chinese report assembled ({len(result.final_report_chinese):,} chars)")
         
         return result
     
@@ -475,22 +488,27 @@ class HierarchicalOrchestrator:
         content: str,
         reading_plan: ReadingPlan,
         progress_callback: Optional[Any] = None,
-        executor: Optional[ThreadPoolExecutor] = None
+        executor: Optional[ThreadPoolExecutor] = None,
+        language: str = "en"
     ) -> Dict[str, str]:
         """Run all three specialists in parallel."""
+        from .hierarchical_prompts import LANG_INSTRUCTION_EN, LANG_INSTRUCTION_ZH
+        
         reports = {}
+        
+        lang_instruction = LANG_INSTRUCTION_ZH if language == 'zh' else LANG_INSTRUCTION_EN
         
         # Define specialist tasks
         specialists = [
-            ("context_hunter", CONTEXT_HUNTER_SYSTEM, CONTEXT_HUNTER_PROMPT, 
+            ("context_hunter", CONTEXT_HUNTER_SYSTEM, CONTEXT_HUNTER_PROMPT + lang_instruction, 
              reading_plan.context_hunter_task, self._extract_sections(content, 
                 reading_plan.context_hunter_task.get("sections", ["Introduction", "Related Work"]))),
             
-            ("math_specialist", MATH_SPECIALIST_SYSTEM, MATH_SPECIALIST_PROMPT,
+            ("math_specialist", MATH_SPECIALIST_SYSTEM, MATH_SPECIALIST_PROMPT + lang_instruction,
              reading_plan.math_specialist_task, self._extract_sections(content,
                 reading_plan.math_specialist_task.get("sections", ["Method", "Approach"]))),
             
-            ("data_auditor", DATA_AUDITOR_SYSTEM, DATA_AUDITOR_PROMPT,
+            ("data_auditor", DATA_AUDITOR_SYSTEM, DATA_AUDITOR_PROMPT + lang_instruction,
              reading_plan.data_auditor_task, self._extract_sections(content,
                 reading_plan.data_auditor_task.get("sections", ["Experiments", "Results"]))),
         ]
@@ -563,27 +581,33 @@ class HierarchicalOrchestrator:
         available_figures: str,
         title: str,
         progress_callback: Optional[Any] = None,
-        executor: Optional[ThreadPoolExecutor] = None
+        executor: Optional[ThreadPoolExecutor] = None,
+        language: str = "en"
     ) -> Dict[str, str]:
-        """Run English and Chinese editors in parallel."""
+        """Run the requested editor (English or Chinese)."""
         reports = {}
         
-        # Define editor tasks
-        editors = [
-            ("english", "editor_english", EDITOR_SYSTEM, EDITOR_PROMPT),
-            ("chinese", "editor_chinese", EDITOR_CHINESE_SYSTEM, EDITOR_CHINESE_PROMPT),
-        ]
+        # Define editor tasks based on language
+        editors = []
+        if language == 'en':
+            editors.append(("english", "editor_english", EDITOR_SYSTEM, EDITOR_PROMPT))
+        elif language == 'zh':
+            editors.append(("chinese", "editor_chinese", EDITOR_CHINESE_SYSTEM, EDITOR_CHINESE_PROMPT))
+        else:
+            # Fallback to English
+            editors.append(("english", "editor_english", EDITOR_SYSTEM, EDITOR_PROMPT))
         
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
-            console=console
+            console=console,
+            transient=True
         ) as progress:
             
             task_ids = {}
             for name, _, _, _ in editors:
-                task_ids[name] = progress.add_task(f"[cyan]Editor ({name})[/cyan]", total=100)
+                task_ids[name] = progress.add_task(f"Editor ({name}) assembling...", total=100)
             
             # Use provided executor or create new one
             executor_context = executor if executor else ThreadPoolExecutor(max_workers=min(2, self.max_workers))
@@ -597,6 +621,7 @@ class HierarchicalOrchestrator:
                 
                 for name, agent_key, system, prompt_template in editors:
                     prompt = prompt_template.format(
+                        title=title,
                         context_report=context_report,
                         math_report=math_report,
                         experiment_report=experiment_report,

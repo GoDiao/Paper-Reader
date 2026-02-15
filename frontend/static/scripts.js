@@ -41,6 +41,9 @@ const translations = {
         parser_auto: 'Auto (Default)',
         enable_web_search: 'Enable Web Search',
         enable_web_search_hint: 'Search GitHub/HuggingFace for reproduction resources (code, models, datasets)',
+        output_language: 'Output Language',
+        language_en: 'English',
+        language_zh: 'Chinese',
         start_analysis: 'Start Analysis',
 
         // Progress
@@ -98,10 +101,14 @@ const translations = {
         parser_auto: '自动 (默认)',
         enable_web_search: '启用网络搜索',
         enable_web_search_hint: '搜索 GitHub/HuggingFace 获取复现资源（代码、模型、数据集）',
+        output_language: '输出语言',
+        language_en: '英语',
+        language_zh: '中文',
         start_analysis: '开始分析',
 
         // Progress
         analysis_progress: '分析进度',
+        step_editor: '编辑',
         pdf_parsing: 'PDF 解析',
         waiting: '等待中...',
 
@@ -168,6 +175,7 @@ const elements = {
     llmProvider: document.getElementById('llmProvider'),
     llmModel: document.getElementById('llmModel'),
     parserBackend: document.getElementById('parserBackend'),
+    outputLanguage: document.getElementById('outputLanguage'),
     enableWebSearch: document.getElementById('enableWebSearch'),
 
     // Analysis
@@ -500,7 +508,8 @@ function connectWebSocket() {
             model: elements.llmModel.value,
             verbose: false,
             parser: elements.parserBackend ? elements.parserBackend.value : 'auto',
-            enable_web_search: enableWebSearch
+            enable_web_search: enableWebSearch,
+            language: elements.outputLanguage ? elements.outputLanguage.value : 'en'
         }));
     };
 
@@ -737,6 +746,8 @@ function updateProgress(data) {
 
     if (phase === 'parsing') {
         stepElement = document.querySelector('.progress-step[data-phase="parsing"]');
+    } else if (agent === 'editor_english' || agent === 'editor_chinese') {
+        stepElement = document.querySelector('.progress-step[data-agent="editor"]');
     } else {
         stepElement = document.querySelector(`.progress-step[data-agent="${agent}"]`);
     }
@@ -805,9 +816,51 @@ function handleAnalysisComplete(data) {
         elements.reportTitle.innerHTML = `<i class="fas fa-file-alt"></i> ${metadata.title}`;
     }
 
-    // Render reports
-    renderReport('en', reports.english);
-    renderReport('zh', reports.chinese);
+    // Render reports and manage tabs
+    const enTab = document.querySelector('.tab-btn[data-lang="en"]');
+    const zhTab = document.querySelector('.tab-btn[data-lang="zh"]');
+    const tabContainer = document.querySelector('.report-tabs');
+    
+    let reportCount = 0;
+
+    if (reports.english) {
+        renderReport('en', reports.english);
+        if (enTab) enTab.style.display = 'inline-flex';
+        reportCount++;
+    } else {
+        if (enTab) enTab.style.display = 'none';
+    }
+    
+    if (reports.chinese) {
+        renderReport('zh', reports.chinese);
+        if (zhTab) zhTab.style.display = 'inline-flex';
+        reportCount++;
+    } else {
+        if (zhTab) zhTab.style.display = 'none';
+    }
+    
+    // Hide tab container if only one report
+    if (tabContainer) {
+        if (reportCount <= 1) {
+            tabContainer.style.display = 'none';
+        } else {
+            tabContainer.style.display = 'flex';
+        }
+    }
+
+    // Auto-select the available tab
+    if (reports.english && !reports.chinese) {
+        enTab.click();
+    } else if (!reports.english && reports.chinese) {
+        zhTab.click();
+    } else {
+        // If both or neither (fallback), default to English or UI language
+        if (state.uiLang === 'zh' && reports.chinese) {
+            zhTab.click();
+        } else {
+            enTab.click();
+        }
+    }
 
     // Render specialist reports if available
     console.log('[handleAnalysisComplete] metadata:', metadata);

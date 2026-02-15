@@ -95,6 +95,14 @@ Examples:
     )
     
     parser.add_argument(
+        "--language",
+        type=str,
+        choices=["en", "zh"],
+        default="en",
+        help="Output language: 'en' (English) or 'zh' (Chinese)"
+    )
+    
+    parser.add_argument(
         "--api-key",
         type=str,
         default="",
@@ -187,7 +195,8 @@ def run_hierarchical_mode(args, parsed_doc, model, images_dir, output_dir):
         content=parsed_doc.markdown_content,
         title=parsed_doc.title,
         images=parsed_doc.images,
-        figure_index_path=figure_index_path if figure_index_path.exists() else None
+        figure_index_path=figure_index_path if figure_index_path.exists() else None,
+        language=args.language
     )
     
     console.print(f"[green]✓[/green] Domain: {analysis.domain}")
@@ -295,7 +304,7 @@ def main():
             
             # Generate figure index for agent use
             parser.generate_figure_index(parsed_doc.images, output_dir)
-        exit()
+        
         # Step 2: Analyze with LLM
         console.print("\n[bold]═══ Step 2: Analyzing Paper ═══[/bold]")
         
@@ -315,14 +324,16 @@ def main():
         generator = ReportGenerator()
         
         # Generate English report
-        report_path = output_dir / "paper_analysis.md"
-        final_report = generator.generate(
-            analysis_report=final_report,
-            image_map=parsed_doc.image_map,
-            title=parsed_doc.title,
-            output_path=report_path,
-            images_output_dir=images_dir
-        )
+        report_path = None
+        if final_report:
+            report_path = output_dir / "paper_analysis.md"
+            final_report = generator.generate(
+                analysis_report=final_report,
+                image_map=parsed_doc.image_map,
+                title=parsed_doc.title,
+                output_path=report_path,
+                images_output_dir=images_dir
+            )
         
         # Generate Chinese report (if available)
         report_path_chinese = None
@@ -338,17 +349,24 @@ def main():
         
         # Final summary
         console.print("\n" + "═" * 50)
-        summary_text = (
-            f"[bold green]✓ Analysis Complete![/bold green]\n\n"
-            f"[blue]Report (EN):[/blue] {report_path}\n"
-        )
+        summary_text = f"[bold green]✓ Analysis Complete![/bold green]\n\n"
+        
+        if report_path:
+            summary_text += f"[blue]Report (EN):[/blue] {report_path}\n"
         if report_path_chinese:
             summary_text += f"[blue]Report (ZH):[/blue] {report_path_chinese}\n"
+            
         summary_text += (
             f"[blue]Images:[/blue] {images_dir}\n"
-            f"[blue]Size (EN):[/blue] {len(final_report):,} characters\n"
-            f"[blue]Mode:[/blue] {args.mode}"
         )
+        
+        if final_report:
+            summary_text += f"[blue]Size (EN):[/blue] {len(final_report):,} characters\n"
+        if final_report_chinese:
+            summary_text += f"[blue]Size (ZH):[/blue] {len(final_report_chinese):,} characters\n"
+            
+        summary_text += f"[blue]Mode:[/blue] {args.mode}"
+        
         console.print(Panel.fit(
             summary_text,
             title="[bold]Summary[/bold]",
@@ -356,10 +374,16 @@ def main():
         ))
         
         # Show preview
-        console.print("\n[bold]Report Preview (EN):[/bold]")
-        console.print("─" * 40)
-        preview = final_report[:1500] + "..." if len(final_report) > 1500 else final_report
-        console.print(Markdown(preview))
+        if final_report:
+            console.print("\n[bold]Report Preview (EN):[/bold]")
+            console.print("─" * 40)
+            preview = final_report[:1500] + "..." if len(final_report) > 1500 else final_report
+            console.print(Markdown(preview))
+        elif final_report_chinese:
+            console.print("\n[bold]Report Preview (ZH):[/bold]")
+            console.print("─" * 40)
+            preview = final_report_chinese[:1500] + "..." if len(final_report_chinese) > 1500 else final_report_chinese
+            console.print(Markdown(preview))
         
     except Exception as e:
         console.print(f"\n[red]✗ Error:[/red] {e}")
