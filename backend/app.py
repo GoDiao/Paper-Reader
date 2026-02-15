@@ -170,10 +170,14 @@ async def upload_pdf(file: UploadFile = File(...)):
     upload_path = UPLOAD_DIR / upload_id
     upload_path.mkdir(parents=True, exist_ok=True)
     
+    # Calculate SHA256 hash of the file content
+    import hashlib
+    content = await file.read()
+    sha256_hash = hashlib.sha256(content).hexdigest()
+    
     # Save the file
     pdf_path = upload_path / file.filename
     with open(pdf_path, "wb") as f:
-        content = await file.read()
         f.write(content)
     
     # Store metadata
@@ -182,7 +186,8 @@ async def upload_pdf(file: UploadFile = File(...)):
         "filename": file.filename,
         "pdf_path": str(pdf_path),
         "uploaded_at": int(time.time() * 1000),
-        "size_bytes": len(content)
+        "size_bytes": len(content),
+        "file_hash": sha256_hash
     }
     
     with open(upload_path / "metadata.json", "w") as f:
@@ -236,17 +241,107 @@ async def run_analysis(
         )
         
         parser = PDFParser()
-        parsed_doc = parser.parse(pdf_path, images_dir, parser_backend=parser_type)
+        parsed_doc = None
         
-        await ws_manager.send_progress(
-            session_id, "parsing", "pdf_parser", "completed",
-            f"Parsed: {parsed_doc.title or 'Untitled'}", 100,
-            {"title": parsed_doc.title, "image_count": len(parsed_doc.images)}
-        )
+        # --- Cache Logic Start ---
+        file_hash = metadata.get("file_hash")
+        cache_hit = False
         
-        # Generate figure index
-        parser.generate_figure_index(parsed_doc.images, output_dir)
+        if file_hash:
+            # Construct cache key: hash + parser_type
+            # Note: "auto" resolves to a concrete type at runtime, but for caching we 
+            # might just cache under "auto" if it worked, or we'd need to know what auto picked.
+            # To be safe, we cache under the requested parser_type. 
+            # Ideally, we should cache under the *actual* backend used, but "auto" is a strategy.
+            # Let's use the requested parser_type for now as the key.
+            cache_dir = DATA_DIR / "parse_cache" / f"{file_hash}_{parser_type}"
+            cache_file = cache_dir / "parsed.json"
+            
+            if cache_file.exists():
+                try:
+                    logger.info(f"Cache hit for {upload_id} (hash: {file_hash}, parser: {parser_type})")
+                    
+                    # Load parsed document
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        from parsers.pdf_parser import ParsedDocument
+                        parsed_doc = ParsedDocument.from_dict(data)
+                    
+                    # Copy cached images to current output directory
+                    cached_images_dir = cache_dir / "images"
+                    if cached_images_dir.exists():
+                        for img_file in cached_images_dir.glob("*"):
+                            shutil.copy2(img_file, images_dir)
+                    
+                    # Copy figure index if exists
+                    cached_fig_index = cache_dir / "figure_index.json"
+                    if cached_fig_index.exists():
+                        shutil.copy2(cached_fig_index, output_dir)
+                        
+                    cache_hit = True
+                    logger.info("Successfully restored from cache")
+                    
+                    await ws_manager.send_progress(
+                        session_id, "parsing", "pdf_parser", "completed",
+                        f"Parsed (Cached): {parsed_doc.title or 'Untitled'}", 100,
+                        {"title": parsed_doc.title, "image_count": len(parsed_doc.images)}
+                    )
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to restore from cache: {e}")
+                    # Fallback to normal parsing
+                    parsed_doc = None
+        
+        if not parsed_doc:
+            # Normal parsing
+            parsed_doc = parser.parse(pdf_path, images_dir, parser_backend=parser_type)
+            
+            # Save to cache if we have a hash
+            if file_hash:
+                try:
+                    cache_dir = DATA_DIR / "parse_cache" / f"{file_hash}_{parser_type}"
+                    cache_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Save parsed document
+                    with open(cache_dir / "parsed.json", "w", encoding="utf-8") as f:
+                        json.dump(parsed_doc.to_dict(), f, ensure_ascii=False, indent=2)
+                    
+                    # Copy images to cache
+                    cached_images_dir = cache_dir / "images"
+                    cached_images_dir.mkdir(exist_ok=True)
+                    if images_dir.exists():
+                        for img_file in images_dir.glob("*"):
+                            shutil.copy2(img_file, cached_images_dir)
+                    
+                    # Save figure index to cache (will be generated next)
+                    # We'll copy it after generation
+                    
+                    logger.info(f"Saved parse result to cache: {cache_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to save to cache: {e}")
+            
+            await ws_manager.send_progress(
+                session_id, "parsing", "pdf_parser", "completed",
+                f"Parsed: {parsed_doc.title or 'Untitled'}", 100,
+                {"title": parsed_doc.title, "image_count": len(parsed_doc.images)}
+            )
+        # --- Cache Logic End ---
+        
+        # Generate figure index (if not restored from cache)
+        # Note: If cache hit, we already copied figure_index.json if it existed.
+        # But if it didn't exist in cache or we just parsed, we generate it.
         figure_index_path = output_dir / "figure_index.json"
+        if not figure_index_path.exists():
+            parser.generate_figure_index(parsed_doc.images, output_dir)
+            
+            # Update cache with figure index if we just populated the cache
+            if file_hash and not cache_hit:
+                 try:
+                    cache_dir = DATA_DIR / "parse_cache" / f"{file_hash}_{parser_type}"
+                    if cache_dir.exists():
+                        shutil.copy2(figure_index_path, cache_dir)
+                 except Exception as e:
+                    logger.warning(f"Failed to update cache with figure index: {e}")
         
         # ===== Phase 2-3: Analyze with Orchestrator =====
         if mode == "hierarchical":

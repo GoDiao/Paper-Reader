@@ -39,6 +39,27 @@ class ImageInfo:
     caption: Optional[str] = None  # Caption text if available
     page_number: int = 0  # Page where the image appears
 
+    def to_dict(self) -> Dict:
+        """Serialize to dictionary"""
+        return {
+            "image_id": self.image_id,
+            "original_path": str(self.original_path),
+            "saved_path": str(self.saved_path) if self.saved_path else None,
+            "caption": self.caption,
+            "page_number": self.page_number
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> "ImageInfo":
+        """Deserialize from dictionary"""
+        return cls(
+            image_id=data["image_id"],
+            original_path=Path(data["original_path"]),
+            saved_path=Path(data["saved_path"]) if data.get("saved_path") else None,
+            caption=data.get("caption"),
+            page_number=data.get("page_number", 0)
+        )
+
 
 @dataclass
 class ParsedDocument:
@@ -49,6 +70,30 @@ class ParsedDocument:
     images: List[ImageInfo] = field(default_factory=list)
     image_map: Dict[str, str] = field(default_factory=dict)  # "Figure 1" -> path
     metadata: Dict = field(default_factory=dict)
+
+    def to_dict(self) -> Dict:
+        """Serialize to dictionary"""
+        return {
+            "title": self.title,
+            "markdown_content": self.markdown_content,
+            "raw_text": self.raw_text,
+            "images": [img.to_dict() for img in self.images],
+            "image_map": self.image_map,
+            "metadata": self.metadata
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> "ParsedDocument":
+        """Deserialize from dictionary"""
+        images = [ImageInfo.from_dict(img) for img in data.get("images", [])]
+        return cls(
+            title=data.get("title", ""),
+            markdown_content=data.get("markdown_content", ""),
+            raw_text=data.get("raw_text", ""),
+            images=images,
+            image_map=data.get("image_map", {}),
+            metadata=data.get("metadata", {})
+        )
 
 
 class PDFParser:

@@ -57,9 +57,26 @@ const translations = {
         images: 'Images',
         copy: 'Copy',
         specialist_reports: 'Specialist Reports',
+        
+        // P0 Features
+        variable_tracking: 'Variable Tracking',
+        reproduction_checklist: 'Reproduction Checklist',
+        datasets: 'Datasets',
+        hyperparameters: 'Hyperparameters',
+        hardware: 'Hardware Requirements',
+        code_availability: 'Code Availability',
+        risk_assessment: 'Risk Assessment',
 
         // Chat
         chat_with_paper: 'Chat with AI about Paper',
+        
+        // Variables Table
+        var_symbol: 'Symbol',
+        var_name: 'Name',
+        var_definition: 'Definition',
+        var_location: 'Location',
+        var_value: 'Value',
+        search_variables: 'Search variables...',
         chat_welcome: 'Hello! I have read the analysis of this paper. What questions do you have?',
         chat_placeholder: 'Type your question...',
 
@@ -118,9 +135,26 @@ const translations = {
         images: '图片',
         copy: '复制',
         specialist_reports: '专家分析报告',
+        
+        // P0 Features
+        variable_tracking: '变量追踪',
+        reproduction_checklist: '复现清单',
+        datasets: '数据集',
+        hyperparameters: '超参数',
+        hardware: '硬件要求',
+        code_availability: '代码可用性',
+        risk_assessment: '风险评估',
 
         // Chat
         chat_with_paper: '与 AI 讨论论文',
+
+        // Variables Table
+        var_symbol: '符号',
+        var_name: '名称',
+        var_definition: '定义',
+        var_location: '位置',
+        var_value: '值',
+        search_variables: '搜索变量...',
         chat_welcome: '你好！我已阅读了这篇论文的分析报告。有什么问题想问我吗？',
         chat_placeholder: '输入你的问题...',
 
