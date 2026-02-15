@@ -720,6 +720,18 @@ function renderSingleSpecialistReport(agent, markdown) {
 function updateProgress(data) {
     const { phase, agent, status, message } = data;
 
+    // Auto-show specialist section when analysis starts (Global UI update)
+    if (phase === 'analysis' && status === 'started') {
+        const section = document.getElementById('specialistReportsSection');
+        if (section && section.classList.contains('hidden')) {
+            section.classList.remove('hidden');
+            const content = document.getElementById('specialistContent');
+            const toggle = document.getElementById('specialistToggle');
+            if (content) content.classList.add('expanded');
+            if (toggle) toggle.classList.add('expanded');
+        }
+    }
+
     // Find the matching step element
     let stepElement;
 
@@ -729,7 +741,13 @@ function updateProgress(data) {
         stepElement = document.querySelector(`.progress-step[data-agent="${agent}"]`);
     }
 
-    if (!stepElement) return;
+    if (!stepElement) {
+        // Fallback for hidden agents (like Architect) - ensure errors are visible
+        if (status === 'error') {
+            showToast(`Error in ${agent}: ${message}`, 'error');
+        }
+        return;
+    }
 
     // Update step status
     const statusElement = stepElement.querySelector('.step-status');
@@ -749,18 +767,6 @@ function updateProgress(data) {
         case 'error':
             stepElement.classList.add('error');
             break;
-    }
-
-    // Auto-show specialist section when analysis starts
-    if (phase === 'analysis' && status === 'started') {
-        const section = document.getElementById('specialistReportsSection');
-        if (section.classList.contains('hidden')) {
-            section.classList.remove('hidden');
-            const content = document.getElementById('specialistContent');
-            const toggle = document.getElementById('specialistToggle');
-            content.classList.add('expanded');
-            toggle.classList.add('expanded');
-        }
     }
 }
 
