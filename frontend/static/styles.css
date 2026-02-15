@@ -674,9 +674,32 @@ select {
 
 .specialist-report-content {
     padding: 1.5rem;
-    max-height: 500px;
+    height: 500px; /* Default height */
+    min-height: 200px;
+    max-height: 80vh; /* Prevent overflowing viewport too much */
     overflow-y: auto;
     background: var(--bg-surface); /* Ensure contrast */
+    flex: 1; /* Allow content to fill available space */
+}
+
+/* Resize Handle */
+.resize-handle {
+    height: 12px;
+    background: var(--bg-surface-hover);
+    border-top: 1px solid var(--border-color);
+    cursor: row-resize;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    transition: background var(--duration-short);
+    flex-shrink: 0; /* Prevent handle from shrinking */
+}
+
+.resize-handle:hover {
+    background: var(--bg-elevated);
+    color: var(--primary);
 }
 
 /* Markdown Styling Shared */
@@ -832,10 +855,12 @@ select {
 .specialist-content {
     display: none;
     border-top: 1px solid var(--border-color);
+    position: relative; /* For resize handle positioning */
 }
 
 .specialist-content.expanded {
-    display: block;
+    display: flex; /* Changed from block to flex for vertical layout */
+    flex-direction: column;
     animation: fadeIn 0.3s ease;
 }
 
@@ -843,6 +868,7 @@ select {
     display: flex;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-surface);
+    flex-shrink: 0; /* Prevent tabs from shrinking */
 }
 
 .specialist-tab-btn {

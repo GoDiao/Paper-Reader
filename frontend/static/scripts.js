@@ -833,7 +833,8 @@ function handleAnalysisComplete(data) {
             if (statusEl) {
                 // Only update if status is still "Waiting..." or generic
                 const currentText = statusEl.textContent.toLowerCase();
-                if (currentText.includes('waiting') || currentText === '') {
+                const i18nKey = statusEl.getAttribute('data-i18n');
+                if (i18nKey === 'waiting' || currentText.includes('waiting') || currentText === '') {
                     statusEl.setAttribute('data-i18n', 'completed');
                     statusEl.textContent = translations[state.uiLang].completed;
                 }
@@ -1073,6 +1074,57 @@ function initSpecialistReports() {
             });
             document.querySelector(`.specialist-report[data-specialist="${specialist}"]`).classList.add('active');
         });
+    });
+
+    // Resize functionality
+    initSpecialistResize();
+}
+
+function initSpecialistResize() {
+    const handle = document.getElementById('specialistResizeHandle');
+    const content = document.getElementById('specialistReportContent');
+    
+    if (!handle || !content) return;
+
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = content.getBoundingClientRect().height;
+        
+        // Add classes for styling/cursor
+        document.body.style.cursor = 'row-resize';
+        document.body.classList.add('resizing');
+        handle.classList.add('active');
+        
+        e.preventDefault(); // Prevent text selection
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        const deltaY = e.clientY - startY;
+        const newHeight = startHeight + deltaY;
+
+        // Apply new height with min/max constraints
+        // Min height 200px, Max height 80vh
+        if (newHeight > 200 && newHeight < window.innerHeight * 0.8) {
+            content.style.height = `${newHeight}px`;
+            // Remove max-height override if it was set by CSS to allow expansion
+            content.style.maxHeight = 'none';
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.classList.remove('resizing');
+            handle.classList.remove('active');
+        }
     });
 }
 
