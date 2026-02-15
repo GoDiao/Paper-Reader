@@ -1079,8 +1079,20 @@ function renderSpecialistReports(specialistReports) {
             return `<!--MATH${mathIndex++}-->`;
         });
 
+        // Protect display math: \[...\]
+        markdown = markdown.replace(/\\\[[\s\S]*?\\\]/g, (match) => {
+            mathBlocks.push(match);
+            return `<!--MATH${mathIndex++}-->`;
+        });
+
         // Protect inline math: $...$
         markdown = markdown.replace(/\$[^\$\n]+?\$/g, (match) => {
+            mathBlocks.push(match);
+            return `<!--MATH${mathIndex++}-->`;
+        });
+
+        // Protect inline math: \(...\)
+        markdown = markdown.replace(/\\\([\s\S]*?\\\)/g, (match) => {
             mathBlocks.push(match);
             return `<!--MATH${mathIndex++}-->`;
         });

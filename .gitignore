@@ -31,6 +31,7 @@ test_output/
 uploads/
 papers/
 data/reports.json
+data/parse_cache/
 data/reports.json.bak
 *.pdf
 

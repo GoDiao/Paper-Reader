@@ -389,11 +389,23 @@ async def run_analysis(
             
             # Import simple mode function
             from main import run_simple_mode
-            # ... (would need adaptation)
-            report_en = ""
+            # Placeholder for simple mode integration
+            # For now, simple mode doesn't support language selection well, so we default to English
+            # But we should respect the language flag to avoid empty tabs
+            
+            # Mock result for now as simple mode refactoring is needed
+            report_en = "Simple mode analysis not yet fully integrated with web UI."
             report_zh = ""
-            domain = ""
+            
+            if language == 'zh':
+                report_zh = "简单模式分析尚未完全集成到 Web UI。"
+                report_en = ""
+            
+            domain = "General"
             figure_suggestions = {}
+            variable_tracking = None
+            reproduction_checklist = None
+            specialist_reports = {}
         
         # ===== Save Reports =====
         generator = ReportGenerator()

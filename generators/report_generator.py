@@ -36,7 +36,8 @@ class ReportGenerator:
         final_md = self._embed_images(final_md, image_map)
         
         # 3. Add title if missing
-        if title and not final_md.startswith(f"#"):
+        # Only add title if content is not empty
+        if final_md and title and not final_md.startswith(f"#"):
             final_md = f"# 📄 {title}\n\n{final_md}"
             
         # 4. Save Markdown file
