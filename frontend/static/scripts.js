@@ -557,7 +557,7 @@ function handleArchitectPlan(data) {
 
     // Architect UI removed per user request
     // We just ensure the section is visible for other agents
-}
+}   
 
 function formatArchitectPlan(plan) {
     let md = `### 📋 Research Plan\n\n`;
