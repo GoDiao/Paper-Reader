@@ -657,6 +657,15 @@ select {
     color: var(--text-secondary);
 }
 
+.report-lang {
+    display: none;
+}
+
+.report-lang.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
 .report-content {
     padding: 2.5rem;
     max-height: calc(100vh - 200px);
