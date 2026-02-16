@@ -668,8 +668,7 @@ select {
 
 .report-content {
     padding: 2.5rem;
-    max-height: calc(100vh - 200px);
-    overflow-y: auto;
+    overflow-y: visible; /* Allow content to expand */
 }
 
 .specialist-report-content {
