@@ -675,10 +675,10 @@ select {
     padding: 1.5rem;
     height: 500px; /* Default height */
     min-height: 200px;
-    max-height: 80vh; /* Prevent overflowing viewport too much */
+    /* max-height removed to allow full expansion */
     overflow-y: auto;
     background: var(--bg-surface); /* Ensure contrast */
-    flex: 1; /* Allow content to fill available space */
+    flex: 0 0 auto;
 }
 
 /* Resize Handle */
@@ -699,6 +699,25 @@ select {
 .resize-handle:hover {
     background: var(--bg-elevated);
     color: var(--primary);
+}
+
+.resize-handle.active {
+    background: var(--primary-subtle);
+    color: var(--primary);
+}
+
+body.resizing .specialist-report-content {
+    outline: 1px dashed var(--primary);
+    outline-offset: -1px;
+}
+
+body.resizing .resize-handle {
+    background: var(--primary-subtle);
+    color: var(--primary);
+}
+
+body.resizing {
+    user-select: none;
 }
 
 /* Markdown Styling Shared */

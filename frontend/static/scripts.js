@@ -1087,40 +1087,82 @@ function initSpecialistResize() {
     if (!handle || !content) return;
 
     let isResizing = false;
-    let startY = 0;
-    let startHeight = 0;
+    let startY = 0; // Initial mouse PageY
+    let startHeight = 0; // Initial content height
+    let lastClientY = 0; // Current mouse ClientY (viewport)
+    let autoScrollRaf = null;
+
+    // Helper: Update height based on current scroll position
+    const updateHeight = () => {
+        const currentPageY = lastClientY + window.scrollY;
+        const deltaY = currentPageY - startY;
+        const newHeight = Math.max(200, startHeight + deltaY);
+        content.style.height = `${newHeight}px`;
+        content.style.maxHeight = 'none';
+    };
+
+    // Helper: Auto-scroll loop
+    const startAutoScroll = () => {
+        if (autoScrollRaf) return;
+
+        const loop = () => {
+            const edgeThreshold = 50;
+            const scrollStep = 15;
+            let scrolled = false;
+
+            if (lastClientY > window.innerHeight - edgeThreshold) {
+                window.scrollBy(0, scrollStep);
+                scrolled = true;
+            } else if (lastClientY < edgeThreshold) {
+                window.scrollBy(0, -scrollStep);
+                scrolled = true;
+            }
+
+            if (scrolled) {
+                updateHeight(); // Sync height with new scroll position
+                autoScrollRaf = requestAnimationFrame(loop);
+            } else {
+                stopAutoScroll();
+            }
+        };
+        autoScrollRaf = requestAnimationFrame(loop);
+    };
+
+    const stopAutoScroll = () => {
+        if (autoScrollRaf) {
+            cancelAnimationFrame(autoScrollRaf);
+            autoScrollRaf = null;
+        }
+    };
 
     handle.addEventListener('mousedown', (e) => {
         isResizing = true;
-        startY = e.clientY;
+        // Capture initial state
+        startY = e.pageY;
         startHeight = content.getBoundingClientRect().height;
+        lastClientY = e.clientY;
         
-        // Add classes for styling/cursor
+        // Add styling
         document.body.style.cursor = 'row-resize';
         document.body.classList.add('resizing');
         handle.classList.add('active');
         
-        e.preventDefault(); // Prevent text selection
+        e.preventDefault();
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
 
-        const deltaY = e.clientY - startY;
-        const newHeight = startHeight + deltaY;
-
-        // Apply new height with min/max constraints
-        // Min height 200px, Max height 80vh
-        if (newHeight > 200 && newHeight < window.innerHeight * 0.8) {
-            content.style.height = `${newHeight}px`;
-            // Remove max-height override if it was set by CSS to allow expansion
-            content.style.maxHeight = 'none';
-        }
+        lastClientY = e.clientY;
+        updateHeight();
+        startAutoScroll(); // Check if we need to start scrolling
     });
 
     document.addEventListener('mouseup', () => {
         if (isResizing) {
             isResizing = false;
+            stopAutoScroll();
+            
             document.body.style.cursor = '';
             document.body.classList.remove('resizing');
             handle.classList.remove('active');
