@@ -205,6 +205,15 @@ paper_reader/
 
 ## 🚀 Changelog
 
+### v1.6.0 - History, Export & Performance
+
+- **🗂️ Report History**: Persistent report store with browse/search/delete, plus reloadable specialist reports and chat history.
+- **📤 One-click Export**: Export reports as Markdown/DOCX, download extracted figures as a ZIP (PDF export supported via optional dependencies).
+- **⚡ PDF Parse Cache**: SHA256-based parse caching (parsed content + figures) to significantly speed up repeated analyses.
+- **🌐 Web Search Toggle**: UI switch to enable/disable reproduction resource discovery, with GitHub/HuggingFace token support.
+- **🤝 Provider Expansion**: Added SiliconFlow provider support in the web UI with concurrency tuning to reduce rate-limit errors.
+- **🈯 Output Language Control**: Choose EN or ZH output to reduce cost and avoid empty report tabs.
+
 ### v1.5.0 - UI Modernization & Resource Discovery
 
 - **🎨 Modern UI Overhaul**: Complete redesign with a new Zinc-based dark theme, high-contrast tables for better readability, and refined typography.
