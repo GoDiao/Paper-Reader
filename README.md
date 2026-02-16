@@ -6,7 +6,7 @@
   <br />
   
   [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](MinerU/LICENSE.md)
   [![DeepSeek](https://img.shields.io/badge/DeepSeek-Powered-blue)](https://www.deepseek.com/)
   [![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991)](https://openai.com/)
 
@@ -96,18 +96,52 @@ The system operates using a "Divide and Conquer" strategy orchestrated by a cent
 
 ```bash
 git clone https://github.com/GoDiao/Paper-Reader.git
-cd paper_reader
+cd Paper-Reader
+python -m venv .venv
+
+# macOS / Linux
+source .venv/bin/activate
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
+```
+
+Optional dependencies:
+
+```bash
+# PDF export (Windows needs extra system dependencies; see weasyprint docs)
+pip install weasyprint
 ```
 
 ### Configuration
 
-Create a `.env` file:
+Copy the env template and fill in your keys (do not commit `.env`):
+
+```bash
+# macOS / Linux
+cp .env.example .env
+
+# Windows (PowerShell)
+Copy-Item .env.example .env
+```
+
+Minimal `.env` (choose one):
 
 ```env
 DEEPSEEK_API_KEY=sk-your-key
 # OR
 OPENAI_API_KEY=sk-your-key
+```
+
+Optional settings (web search enrichment + extra providers):
+
+```env
+SILICONFLOW_API_KEY=your_siliconflow_api_key_here
+ENABLE_WEB_SEARCH=false
+GITHUB_TOKEN=your_github_token_here
+HUGGINGFACE_TOKEN=your_huggingface_token_here
+SERPER_API_KEY=your_serper_api_key_here
 ```
 
 ### Usage
@@ -122,6 +156,9 @@ python web_server.py
 
 Open **<http://localhost:8000>** in your browser.
 
+> **Note (Simple mode in Web UI)**  
+> The `Simple` mode in the web UI is currently a placeholder and returns a brief message. Use `Hierarchical` mode for full reports.
+
 > **Note (Parser Backend in Web Mode)**  
 > The web server currently uses the `auto` strategy by default:  
 > - If MinerU (`pip install mineru`) is installed, it will try the **MinerU** backend first.  
@@ -131,7 +168,7 @@ Open **<http://localhost:8000>** in your browser.
 
 ```bash
 # Full hierarchical analysis (Default, auto parser backend)
-python main.py papers/attention_is_all_you_need.pdf
+python main.py paper.pdf
 
 # Force fast PyMuPDF backend
 python main.py paper.pdf --parser pymupdf
@@ -144,6 +181,9 @@ python main.py paper.pdf --verbose
 
 # Use OpenAI instead of DeepSeek
 python main.py paper.pdf --provider openai --model gpt-4o
+
+# Output Chinese only (can reduce cost)
+python main.py paper.pdf --language zh
 ```
 
 ### PDF Parsers: PyMuPDF vs MinerU
@@ -159,8 +199,8 @@ python main.py paper.pdf --provider openai --model gpt-4o
   - When used, this project normalizes MinerU's Markdown + images into the same `ParsedDocument` format as PyMuPDF, so downstream agents and UI work identically.
 
 > **Repository Note**  
-> The Git repo only contains the **integration code** (e.g., `parsers/pdf_parser.py`).  
-> Heavy MinerU model/checkpoint data is cached under `MinerU/ckpt/` **and is git-ignored** by default, so you don't accidentally push large weights.
+> This project supports `pip install mineru` as an optional parsing backend; MinerU manages its own model cache (usually under your user/cache directory).  
+> This repository also contains the upstream `MinerU/` source tree (licensed under AGPL-3.0). If you want a permissive license for your app code, avoid shipping MinerU source in the same repo.
 
 ---
 
@@ -168,19 +208,32 @@ python main.py paper.pdf --provider openai --model gpt-4o
 
 The system organizes outputs to keep your research clean:
 
+### Web mode (`python web_server.py`)
+
 ```text
 outputs/
-└── {Paper_Title}_{Timestamp}/
-    ├── paper_analysis.md       # 🇬🇧 Final English Report
-    ├── paper_analysis_zh.md    # 🇨🇳 Final Chinese Report
-    ├── images/                 # 🖼️ All extracted figures
-    │   ├── Figure_1.png
-    │   └── ...
-    ├── specialists/            # 🕵️ Intermediate Specialist Reports
-    │   ├── 01_context_hunter.md
-    │   ├── 02_math_specialist.md
-    │   └── 03_data_auditor.md
-    └── figure_index.json       # Metadata
+└── {upload_id}/
+    ├── paper_analysis.md
+    ├── paper_analysis_zh.md
+    ├── images/
+    ├── specialists/
+    └── figure_index.json
+
+data/
+└── reports.json
+```
+
+### CLI mode (`python main.py ...`)
+
+```text
+output/
+└── {pdf_stem}/
+    ├── paper_analysis.md
+    ├── paper_analysis_zh.md
+    ├── images/
+    ├── parsed/
+    ├── specialists/
+    └── figure_index.json
 ```
 
 ---
@@ -260,7 +313,7 @@ Contributions are welcome! Whether it's a new specialist agent, better parsing l
 
 ## 📄 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+This repository includes `MinerU/` (AGPL-3.0), so redistribution must follow AGPL-3.0. See [LICENSE.md](MinerU/LICENSE.md).
 
 ---
 

@@ -6,7 +6,7 @@
   <br />
   
   [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](MinerU/LICENSE.md)
   [![DeepSeek](https://img.shields.io/badge/DeepSeek-Powered-blue)](https://www.deepseek.com/)
   [![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991)](https://openai.com/)
 
@@ -72,7 +72,7 @@
 
 - **智能提取**：基于 PyMuPDF 的自定义 PDF 解析管线，精确分割文本和图像。
 - **上下文保留**：图片与其相关文本保持关联。
-- **自动嵌入**：AI 会在讨具体内容时自动将图片插入到报告中。
+- **自动嵌入**：AI 会在讨论具体内容时自动将图片插入到报告中。
 
 ### 💻 现代化交互
 
@@ -96,18 +96,52 @@
 
 ```bash
 git clone https://github.com/GoDiao/Paper-Reader.git
-cd paper_reader
+cd Paper-Reader
+python -m venv .venv
+
+# macOS / Linux
+source .venv/bin/activate
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
+```
+
+可选依赖：
+
+```bash
+# PDF 导出（Windows 需要额外系统依赖，见 weasyprint 官方文档）
+pip install weasyprint
 ```
 
 ### 配置
 
-在项目根目录创建 `.env` 文件：
+复制环境变量模板并填写密钥（不要把 `.env` 提交到仓库）：
+
+```bash
+# macOS / Linux
+cp .env.example .env
+
+# Windows (PowerShell)
+Copy-Item .env.example .env
+```
+
+`.env` 最小配置（任选其一）：
 
 ```env
 DEEPSEEK_API_KEY=sk-your-key
 # 或
 OPENAI_API_KEY=sk-your-key
+```
+
+可选配置（Web 端“复现资源发现 / 网络搜索”与更多 Provider）：
+
+```env
+SILICONFLOW_API_KEY=your_siliconflow_api_key_here
+ENABLE_WEB_SEARCH=false
+GITHUB_TOKEN=your_github_token_here
+HUGGINGFACE_TOKEN=your_huggingface_token_here
+SERPER_API_KEY=your_serper_api_key_here
 ```
 
 ### 使用方法
@@ -122,6 +156,9 @@ python web_server.py
 
 在浏览器中打开 **<http://localhost:8000>**。
 
+> **说明（Web 的 Simple 模式）**  
+> Web UI 的 `Simple` 模式当前为占位实现，会返回提示文本；建议使用 `Hierarchical` 模式获得完整分析报告。
+ 
 > **说明（Web 模式下的解析后端）**  
 > Web 服务当前默认使用 `auto` 策略：  
 > - 如果本地已安装 MinerU（`pip install mineru`），会优先尝试 **MinerU** 解析。  
@@ -131,7 +168,7 @@ python web_server.py
 
 ```bash
 # 全层级深度分析（默认，自动选择解析后端）
-python main.py papers/attention_is_all_you_need.pdf
+python main.py paper.pdf
 
 # 强制使用快速的 PyMuPDF 解析后端
 python main.py paper.pdf --parser pymupdf
@@ -144,6 +181,9 @@ python main.py paper.pdf --verbose
 
 # 使用 OpenAI 替代 DeepSeek
 python main.py paper.pdf --provider openai --model gpt-4o
+
+# 仅输出中文报告（可减少开销）
+python main.py paper.pdf --language zh
 ```
 
 ### PDF 解析器：PyMuPDF vs MinerU
@@ -159,8 +199,8 @@ python main.py paper.pdf --provider openai --model gpt-4o
   - 本项目会将 MinerU 产出的 Markdown + 图片规范化为统一的 `ParsedDocument` 结构，下游 Agent 和前端 UI 在不同解析后端之间无缝复用。
 
 > **仓库说明**  
-> Git 仓库中只包含 **集成代码**（例如 `parsers/pdf_parser.py`），不会包含 MinerU 的大模型 / 权重文件。  
-> MinerU 的模型与检查点会缓存在 `MinerU/ckpt/` 目录下，并已在 `.gitignore` 中忽略，避免误把大文件推送到远端仓库。
+> 本项目支持通过 `pip install mineru` 使用 MinerU 解析后端；MinerU 的模型缓存由其自身管理（通常在用户目录/缓存目录下）。  
+> 当前仓库同时包含 `MinerU/` 源码（许可证为 AGPL-3.0），如需以更宽松许可证开源你的业务代码，建议不要将 MinerU 源码一并发布到同一仓库。
 
 ---
 
@@ -168,19 +208,32 @@ python main.py paper.pdf --provider openai --model gpt-4o
 
 系统将输出组织得井井有条：
 
+### Web 模式（`python web_server.py`）
+
 ```text
 outputs/
-└── {论文标题}_{时间戳}/
-    ├── paper_analysis.md       # 🇬🇧 英文最终报告
-    ├── paper_analysis_zh.md    # 🇨🇳 中文最终报告
-    ├── images/                 # 🖼️ 所有提取的插图
-    │   ├── Figure_1.png
-    │   └── ...
-    ├── specialists/            # 🕵️ 中间专家报告
-    │   ├── 01_context_hunter.md
-    │   ├── 02_math_specialist.md
-    │   └── 03_data_auditor.md
+└── {upload_id}/
+    ├── paper_analysis.md       # 英文最终报告（如选择输出）
+    ├── paper_analysis_zh.md    # 中文最终报告（如选择输出）
+    ├── images/                 # 所有提取的插图
+    ├── specialists/            # 中间专家报告
     └── figure_index.json       # 元数据
+
+data/
+└── reports.json                # 历史记录索引
+```
+
+### CLI 模式（`python main.py ...`）
+
+```text
+output/
+└── {pdf_stem}/
+    ├── paper_analysis.md
+    ├── paper_analysis_zh.md
+    ├── images/
+    ├── parsed/                 # PDF 解析中间产物（markdown/图片等）
+    ├── specialists/
+    └── figure_index.json
 ```
 
 ---
@@ -260,7 +313,7 @@ paper_reader/
 
 ## 📄 许可证
 
-本项目基于 MIT 许可证开源。详见 `LICENSE` 文件。
+本仓库包含 `MinerU/`（AGPL-3.0），整体分发需遵循 AGPL-3.0。详见 [LICENSE.md](MinerU/LICENSE.md)。
 
 ---
 
