@@ -96,7 +96,8 @@ const translations = {
         analysis_complete: 'Analysis Complete!',
         completed: 'Completed',
         copied: 'Copied to clipboard!',
-        copy_failed: 'Copy failed'
+        copy_failed: 'Copy failed',
+        pdf_dev_msg: 'Feature under development, please right click and use the print method.'
     },
     zh: {
         // Header
@@ -174,7 +175,8 @@ const translations = {
         analysis_complete: '分析完成！',
         completed: '已完成',
         copied: '已复制到剪贴板！',
-        copy_failed: '复制失败'
+        copy_failed: '复制失败',
+        pdf_dev_msg: '功能正在开发，请右键使用print方法'
     }
 };
 
@@ -1499,6 +1501,15 @@ function initExport() {
     exportBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const format = btn.dataset.format;
+            
+            // PDF button specific behavior
+            if (format === 'pdf') {
+                const t = translations[state.uiLang] || translations.en;
+                const msg = t.pdf_dev_msg;
+                showToast(msg, 'info');
+                return;
+            }
+
             exportReport(format);
         });
     });
