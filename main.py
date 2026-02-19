@@ -35,7 +35,6 @@ from rich.markdown import Markdown
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import AppConfig
 from parsers import PDFParser, ParsedDocument
 from agents import ReasoningAgent, HierarchicalOrchestrator
 from generators import ReportGenerator
@@ -141,7 +140,7 @@ Examples:
         default="auto",
         help="PDF parser backend: 'pymupdf' (fast, default) or 'mineru' (high-fidelity, requires setup)"
     )
-    
+
     return parser.parse_args()
 
 
@@ -242,6 +241,7 @@ def main():
         f"[cyan]Mode: {mode_desc}[/cyan]",
         border_style="blue"
     ))
+
     
     # Validate PDF path
     pdf_path = Path(args.pdf_path)
@@ -346,7 +346,7 @@ def main():
                 output_path=report_path_chinese,
                 images_output_dir=images_dir
             )
-        
+
         # Final summary
         console.print("\n" + "═" * 50)
         summary_text = f"[bold green]✓ Analysis Complete![/bold green]\n\n"
@@ -366,7 +366,7 @@ def main():
             summary_text += f"[blue]Size (ZH):[/blue] {len(final_report_chinese):,} characters\n"
             
         summary_text += f"[blue]Mode:[/blue] {args.mode}"
-        
+
         console.print(Panel.fit(
             summary_text,
             title="[bold]Summary[/bold]",

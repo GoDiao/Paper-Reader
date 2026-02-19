@@ -85,6 +85,7 @@ const translations = {
         download_pdf: 'Download PDF',
         download_word: 'Download Word',
         download_images: 'Download Images',
+        export_notion: 'Export to Notion',
         copy_clipboard: 'Copy to Clipboard',
         chat_with_ai: 'Chat with AI about Paper',
         close_chat: 'Close Chat',
@@ -97,7 +98,12 @@ const translations = {
         completed: 'Completed',
         copied: 'Copied to clipboard!',
         copy_failed: 'Copy failed',
-        pdf_dev_msg: 'Feature under development, please right click and use the print method.'
+        pdf_dev_msg: 'Feature under development, please right click and use the print method.',
+        notion_include_specialists_confirm: 'Include specialist reports?',
+        notion_exporting: 'Exporting to Notion...',
+        notion_export_success: 'Notion page created',
+        notion_export_failed: 'Notion export failed',
+        no_report: 'No report to export'
     },
     zh: {
         // Header
@@ -164,6 +170,7 @@ const translations = {
         download_pdf: '下载 PDF',
         download_word: '下载 Word',
         download_images: '下载图片',
+        export_notion: '导出到 Notion',
         copy_clipboard: '复制到剪贴板',
         chat_with_ai: '与AI讨论论文',
         close_chat: '关闭聊天',
@@ -176,7 +183,12 @@ const translations = {
         completed: '已完成',
         copied: '已复制到剪贴板！',
         copy_failed: '复制失败',
-        pdf_dev_msg: '功能正在开发，请右键使用print方法'
+        pdf_dev_msg: '功能正在开发，请右键使用print方法',
+        notion_include_specialists_confirm: '是否包含专家输出？',
+        notion_exporting: '正在导出到 Notion...',
+        notion_export_success: 'Notion 页面已创建',
+        notion_export_failed: 'Notion 导出失败',
+        no_report: '没有可导出的报告'
     }
 };
 
@@ -1519,6 +1531,8 @@ function initExport() {
 
     // Download images
     document.getElementById('downloadImages').addEventListener('click', downloadImages);
+
+    document.getElementById('exportNotion').addEventListener('click', exportToNotion);
 }
 
 async function exportReport(format) {
@@ -1560,6 +1574,44 @@ async function exportReport(format) {
     } catch (error) {
         hideLoading();
         showToast('导出失败: ' + error.message, 'error');
+    }
+}
+
+async function exportToNotion() {
+    const t = translations[state.uiLang] || translations.en;
+    if (!state.reportId) {
+        showToast(t.no_report, 'error');
+        return;
+    }
+
+    const includeSpecialists = window.confirm(t.notion_include_specialists_confirm);
+    const url = `/api/reports/${state.reportId}/export/notion`;
+    const payload = {
+        lang: state.currentLang,
+        include_specialists: includeSpecialists
+    };
+
+    try {
+        showLoading(t.notion_exporting);
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const detail = data && data.detail ? data.detail : t.notion_export_failed;
+            throw new Error(detail);
+        }
+
+        hideLoading();
+        showToast(t.notion_export_success, 'success');
+        if (data.notion_url) {
+            window.open(data.notion_url, '_blank');
+        }
+    } catch (error) {
+        hideLoading();
+        showToast(`${t.notion_export_failed}: ${error.message}`, 'error');
     }
 }
 

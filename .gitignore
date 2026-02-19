@@ -23,6 +23,9 @@ wheels/
 
 # Secrets
 .env
+.env.*
+!.env.example
+!**/.env.example
 
 # Project specific
 outputs/

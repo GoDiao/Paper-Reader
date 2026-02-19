@@ -41,6 +41,7 @@ from agents.hierarchical_orchestrator import HierarchicalOrchestrator
 from generators.report_generator import ReportGenerator
 from config import LLMConfig, WebSearchConfig
 from services.resource_finder import ResourceFinder
+from ImageGo.imagego import rewrite_markdown_images_via_imgbb
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +53,9 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "outputs"
 DATA_DIR = BASE_DIR / "data"
 FRONTEND_DIR = BASE_DIR / "frontend"
+
+load_dotenv(BASE_DIR / ".env", override=False)
+load_dotenv(BASE_DIR / "md2notion" / ".env", override=False)
 
 # Ensure directories exist
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -83,9 +87,64 @@ class ChatResponse(BaseModel):
     metadata: Optional[Dict] = None
 
 
+class NotionExportRequest(BaseModel):
+    lang: str = "en"
+    include_specialists: bool = True
+
+
 # Global instances
 ws_manager = WebSocketManager()
 report_store = ReportStore(DATA_DIR / "reports.json")
+
+
+def _strip_first_h1(markdown: str) -> str:
+    if not markdown:
+        return markdown
+    lines = markdown.splitlines()
+    if not lines:
+        return markdown
+    first = lines[0].strip()
+    if first.startswith("#"):
+        return "\n".join(lines[1:]).lstrip("\n")
+    return markdown
+
+
+def _load_specialist_reports(report: Dict[str, Any]) -> Dict[str, str]:
+    specialist_reports = report.get("specialist_reports", {}) or {}
+    if specialist_reports:
+        return specialist_reports
+
+    upload_id = report.get("metadata", {}).get("upload_id", report.get("id", ""))
+    if not upload_id:
+        return specialist_reports
+    specialists_dir = OUTPUT_DIR / upload_id / "specialists"
+    if not specialists_dir.exists():
+        return specialist_reports
+
+    specialist_files = {
+        "context_hunter": "01_context_hunter.md",
+        "math_specialist": "02_math_specialist.md",
+        "data_auditor": "03_data_auditor.md"
+    }
+    for key, filename in specialist_files.items():
+        filepath = specialists_dir / filename
+        if filepath.exists():
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    specialist_reports[key] = f.read()
+            except Exception as e:
+                logger.warning(f"Failed to read specialist report {filepath}: {e}")
+    return specialist_reports
+
+
+def _import_md2notionpage():
+    try:
+        from md2notionpage import md2notionpage
+        return md2notionpage
+    except ModuleNotFoundError:
+        sys.path.insert(0, str(BASE_DIR / "md2notion"))
+        from md2notionpage import md2notionpage
+        return md2notionpage
 
 
 @asynccontextmanager
@@ -843,6 +902,72 @@ async def export_report(report_id: str, format: str, lang: str = "en"):
     
     else:
         raise HTTPException(status_code=400, detail=f"Unknown format: {format}")
+
+
+@app.post("/api/reports/{report_id}/export/notion")
+async def export_report_to_notion(report_id: str, request: NotionExportRequest):
+    report = await report_store.get_report(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    missing = []
+    if not os.environ.get("NOTION_SECRET"):
+        missing.append("NOTION_SECRET")
+    if not os.environ.get("NOTION_PARENT_PAGE_ID"):
+        missing.append("NOTION_PARENT_PAGE_ID")
+    if not os.environ.get("IMGBB_API_KEY"):
+        missing.append("IMGBB_API_KEY")
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing config: {', '.join(missing)}")
+
+    lang = (request.lang or "en").lower()
+    content = report["report_en"] if lang == "en" else report["report_zh"]
+    if not content:
+        raise HTTPException(status_code=400, detail="Report content is empty")
+
+    combined = content
+    if request.include_specialists:
+        specialist_reports = _load_specialist_reports(report)
+        sections = []
+        order = [
+            ("context_hunter", "Context Hunter"),
+            ("math_specialist", "Math Specialist"),
+            ("data_auditor", "Data Auditor")
+        ]
+        for key, title in order:
+            text = specialist_reports.get(key)
+            if text:
+                cleaned = _strip_first_h1(text).strip()
+                if cleaned:
+                    sections.append(f"### {title}\n\n{cleaned}")
+        if sections:
+            combined = f"{combined.rstrip()}\n\n---\n\n## Specialists\n\n" + "\n\n".join(sections)
+
+    upload_id = report.get("metadata", {}).get("upload_id", report_id)
+    md_dir = OUTPUT_DIR / upload_id
+    cache_path = md_dir / ".imgbb-cache.json"
+    expiration_value = os.environ.get("IMGBB_EXPIRATION", "0")
+    try:
+        expiration = int(expiration_value)
+    except Exception:
+        expiration = 0
+
+    combined = rewrite_markdown_images_via_imgbb(
+        markdown=combined,
+        md_dir=md_dir,
+        api_key=os.environ.get("IMGBB_API_KEY", ""),
+        expiration=expiration,
+        cache_path=cache_path
+    )
+
+    md2notionpage = _import_md2notionpage()
+    title = (report.get("title") or report_id).strip() or report_id
+    notion_url = md2notionpage(
+        combined,
+        title=title,
+        parent_page_id=os.environ.get("NOTION_PARENT_PAGE_ID", "")
+    )
+    return {"notion_url": notion_url}
 
 
 @app.get("/api/uploads/{upload_id}/images")

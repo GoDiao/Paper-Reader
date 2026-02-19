@@ -258,6 +258,15 @@ paper_reader/
 
 ## 🚀 Changelog
 
+### tonotion (tag) - Notion Export (Side Feature)
+
+- **📝 Native Notion Export**: One-click export to Notion pages with full support for:
+  - **Native Tables**: Clean, editable Notion tables (replacing image-based or LaTeX tables).
+  - **Rich Math Support**: Perfect rendering of inline ($...$) and block ($$...$$) equations.
+  - **Nested Lists**: Correct indentation for complex nested lists.
+- **🖼️ Image Optimization**: Improved figure resolution and caption handling during export.
+- **⚡ Core Stability**: Fixed edge cases in list parsing and table generation.
+
 ### v1.6.0 - History, Export & Performance
 
 - **🗂️ Report History**: Persistent report store with browse/search/delete, plus reloadable specialist reports and chat history.
