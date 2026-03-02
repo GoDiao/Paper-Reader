@@ -242,19 +242,21 @@ class HierarchicalOrchestrator:
             if hasattr(progress_callback, "report_architect_plan"):
                 progress_callback.report_architect_plan(result.reading_plan)
 
-        iteration_state = IterationState(max_rounds=max_iterations)
+        # max_rounds = 1 + max_iterations so specialists run again after Gap Agent resolves requests.
+        # max_iterations=1 → 2 runs (initial + 1 refinement). max_iterations=2 → 3 runs.
+        iteration_state = IterationState(max_rounds=(max_iterations + 1) if max_iterations > 0 else 1)
         all_reports: Dict[str, str] = {}
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # max_rounds=0: run once (0 < 1). max_rounds=2: run twice (0,1 < 2).
-            while iteration_state.current_round < max(iteration_state.max_rounds, 1):
-                round_label = f" (Round {iteration_state.current_round + 1})" if iteration_state.max_rounds > 0 else ""
+            while iteration_state.current_round < iteration_state.max_rounds:
+                round_num = iteration_state.current_round + 1
+                round_label = f" (Round {round_num})" if iteration_state.max_rounds > 1 else ""
                 console.print(f"\n[bold]═══ Phase 2: Specialist Analysis{round_label} ═══[/bold]")
 
                 if progress_callback:
-                    progress_callback.specialist_started("context_hunter")
-                    progress_callback.specialist_started("math_specialist")
-                    progress_callback.specialist_started("data_auditor")
+                    progress_callback.specialist_started("context_hunter", round_num)
+                    progress_callback.specialist_started("math_specialist", round_num)
+                    progress_callback.specialist_started("data_auditor", round_num)
 
                 specialist_outputs = self._run_specialists_with_requests(
                     content=content,
@@ -277,9 +279,9 @@ class HierarchicalOrchestrator:
                 result.experiment_report = all_reports.get("data_auditor", "")
 
                 if progress_callback:
-                    progress_callback.specialist_completed("context_hunter")
-                    progress_callback.specialist_completed("math_specialist")
-                    progress_callback.specialist_completed("data_auditor")
+                    progress_callback.specialist_completed("context_hunter", round_num)
+                    progress_callback.specialist_completed("math_specialist", round_num)
+                    progress_callback.specialist_completed("data_auditor", round_num)
 
                 # Phase 2.5: Gap Agent review only when iterative analysis is enabled
                 if max_iterations > 0:

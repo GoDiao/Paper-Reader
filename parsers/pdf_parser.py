@@ -220,7 +220,7 @@ class PDFParser:
             
             # Try to use markdown mode if available (PyMuPDF 1.23+)
             try:
-                # Check if markdown mode is available
+                # Check if markdown mode is available (AssertionError if format not in supported list)
                 markdown_text = page.get_text("markdown")
                 if markdown_text and markdown_text.strip():
                     # Markdown mode provides better structure
@@ -230,8 +230,8 @@ class PDFParser:
                     # Fallback to structured extraction
                     page_markdown.append(self._extract_structured_text(page))
                     page_plain.append(page.get_text("text"))
-            except (AttributeError, TypeError):
-                # Fallback for older PyMuPDF versions
+            except (AttributeError, TypeError, AssertionError):
+                # Fallback for older PyMuPDF versions (markdown not in formats)
                 page_markdown.append(self._extract_structured_text(page))
                 page_plain.append(page.get_text("text"))
             

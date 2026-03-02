@@ -7,6 +7,12 @@
 // Global State
 // ============================================
 
+let stateSpecialistRound = 0;  // which round's report is being viewed (0 = latest)
+
+// Stream render throttle: avoid re-rendering on every token (causes UI freeze)
+const specialistStreamThrottle = {};  // agent -> timeoutId
+const STREAM_RENDER_MS = 100;  // max 1 full render per 100ms during streaming
+
 const state = {
     uploadId: null,
     sessionId: null,
@@ -16,7 +22,10 @@ const state = {
     specialistReports: {},
     currentLang: 'en',
     uiLang: localStorage.getItem('uiLang') || 'en',  // UI language preference
-    theme: localStorage.getItem('uiTheme') || 'dark'  // Theme preference
+    theme: localStorage.getItem('uiTheme') || 'dark',  // Theme preference
+    iterationRounds: [],  // { roundIndex, confidence, gapCount, status }
+    iterationActiveRound: 0,  // which round is currently running (0-based)
+    specialistReportsByRound: {}  // { 0: {...}, 1: {...} } for round comparison
 };
 
 // Internationalization translations
@@ -24,6 +33,7 @@ const translations = {
     en: {
         // Header
         history: 'History',
+        delete: 'Delete',
 
         // Landing
         hero_title_1: 'AI-Powered',
@@ -53,6 +63,7 @@ const translations = {
         needs_iteration: 'Needs Iteration',
         requests_found: 'Requests',
         round: 'Round',
+        refining_analysis: 'Refining analysis...',
         output_language: 'Output Language',
         language_en: 'English',
         language_zh: 'Chinese',
@@ -78,6 +89,8 @@ const translations = {
         hardware: 'Hardware Requirements',
         code_availability: 'Code Availability',
         risk_assessment: 'Risk Assessment',
+        reproducibility_score: 'Reproducibility',
+        load_more: 'Load more',
 
         // Chat
         chat_with_paper: 'Chat with AI about Paper',
@@ -120,6 +133,7 @@ const translations = {
     zh: {
         // Header
         history: '历史',
+        delete: '删除',
 
         // Landing
         hero_title_1: 'AI 驱动的',
@@ -149,6 +163,7 @@ const translations = {
         needs_iteration: '需要迭代',
         requests_found: '请求数',
         round: '轮次',
+        refining_analysis: '正在优化分析...',
         output_language: '输出语言',
         language_en: '英语',
         language_zh: '中文',
@@ -175,6 +190,8 @@ const translations = {
         hardware: '硬件要求',
         code_availability: '代码可用性',
         risk_assessment: '风险评估',
+        reproducibility_score: '可复现性',
+        load_more: '加载更多',
 
         // Chat
         chat_with_paper: '与 AI 讨论论文',
@@ -226,6 +243,62 @@ const converter = new showdown.Converter({
     simpleLineBreaks: true
 });
 
+// Lazy load thresholds
+const LAZY_REPORT_INITIAL = 20;
+const LAZY_REPORT_BATCH = 15;
+const VIRTUAL_SCROLL_THRESHOLD = 50;
+const VIRTUAL_ROW_HEIGHT = 44;
+
+/**
+ * Apply lazy loading to report content: render first N blocks, load more on scroll.
+ * @param {HTMLElement} container - Report container
+ * @param {string} html - Full HTML string
+ * @param {Function} postProcess - Called with (container, newNodes). newNodes is null for initial; array of new elements for incremental.
+ */
+function applyLazyReport(container, html, postProcess) {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const blocks = Array.from(temp.children);
+    container.innerHTML = '';
+
+    function appendBlocks(start, end, newNodes) {
+        const slice = blocks.slice(start, end);
+        slice.forEach(b => container.appendChild(b));
+        postProcess(container, newNodes);
+        container.querySelectorAll('img').forEach(img => { img.loading = 'lazy'; });
+    }
+
+    if (blocks.length <= LAZY_REPORT_INITIAL) {
+        appendBlocks(0, blocks.length, null);
+        return;
+    }
+
+    appendBlocks(0, LAZY_REPORT_INITIAL, null);
+    let nextIndex = LAZY_REPORT_INITIAL;
+
+    const sentinel = document.createElement('div');
+    sentinel.className = 'report-lazy-sentinel';
+    sentinel.style.cssText = 'height:1px;visibility:hidden;pointer-events:none;';
+    container.appendChild(sentinel);
+
+    const observer = new IntersectionObserver((entries) => {
+        if (!entries[0].isIntersecting || nextIndex >= blocks.length) return;
+        const end = Math.min(nextIndex + LAZY_REPORT_BATCH, blocks.length);
+        sentinel.remove();
+        appendBlocks(nextIndex, end, blocks.slice(nextIndex, end));
+        nextIndex = end;
+        if (nextIndex < blocks.length) {
+            container.appendChild(sentinel);
+        }
+        observer.disconnect();
+        if (nextIndex < blocks.length) {
+            observer.observe(sentinel);
+        }
+    }, { root: null, rootMargin: '100px', threshold: 0 });
+
+    observer.observe(sentinel);
+}
+
 // ============================================
 // DOM Elements
 // ============================================
@@ -257,12 +330,13 @@ const elements = {
     gapAgentPanel: document.getElementById('gapAgentPanel'),
     gapAgentStatus: document.getElementById('gapAgentStatus'),
     gapAgentResult: document.getElementById('gapAgentResult'),
-    gapConfidenceValue: document.getElementById('gapConfidenceValue'),
+    gapConfidenceRing: document.getElementById('gapConfidenceRing'),
     gapIterationValue: document.getElementById('gapIterationValue'),
     gapRequestCountValue: document.getElementById('gapRequestCountValue'),
     gapRecommendation: document.getElementById('gapRecommendation'),
     gapRequestsList: document.getElementById('gapRequestsList'),
     iterationPanel: document.getElementById('iterationPanel'),
+    iterationTimeline: document.getElementById('iterationTimeline'),
     requestsList: document.getElementById('requestsList'),
     currentRoundEl: document.getElementById('currentRound'),
     maxRoundsEl: document.getElementById('maxRounds'),
@@ -573,8 +647,15 @@ function startAnalysis() {
     if (elements.iterationPanel) {
         elements.iterationPanel.classList.add('hidden');
         if (elements.requestsList) elements.requestsList.innerHTML = '';
+        state.iterationRounds = [];
+        state.iterationActiveRound = 0;
+        state.specialistReportsByRound = {};
         const maxIter = elements.maxIterations ? parseInt(elements.maxIterations.value, 10) || 0 : 0;
         if (elements.currentRoundEl) elements.currentRoundEl.textContent = '1';
+        if (elements.iterationTimeline) {
+            elements.iterationTimeline.classList.add('hidden');
+            elements.iterationTimeline.innerHTML = '';
+        }
         if (elements.maxRoundsEl) elements.maxRoundsEl.textContent = String(maxIter);
     }
 
@@ -745,18 +826,13 @@ function handleStreamMessage(data) {
     }
     state.specialistReports[agent] += token;
 
-    // Render (throttled/managed)
-    // For streaming efficiency, we might just append text node if it's simple text, 
-    // but Markdown needs parsing. 
-    // Full re-render on every token is expensive. 
-    // Lets try simple text append for now, or throttled markdown render.
-    // For this implementation, let's settle for simple re-render every X tokens or use a throttle function.
-    // Given the complexity, let's just re-render. Modern browsers are fast enough for small docs.
-    // If it lags, we can optimize.
-
-    requestAnimationFrame(() => {
-        renderSingleSpecialistReport(agent, state.specialistReports[agent]);
-    });
+    // Throttled render: full Markdown+KaTeX on every token blocks main thread and freezes UI.
+    // Schedule at most 1 render per STREAM_RENDER_MS; immediate final render on specialist_completed.
+    if (specialistStreamThrottle[agent] != null) return;  // already scheduled
+    specialistStreamThrottle[agent] = setTimeout(() => {
+        specialistStreamThrottle[agent] = null;
+        renderSingleSpecialistReport(agent, state.specialistReports[agent] || '');
+    }, STREAM_RENDER_MS);
 }
 
 function renderSingleSpecialistReport(agent, markdown) {
@@ -849,8 +925,18 @@ function updateProgress(data) {
                 if (elements.gapAgentResult) {
                     elements.gapAgentResult.classList.remove('hidden');
                     const conf = payload.overall_confidence;
-                    if (elements.gapConfidenceValue) {
-                        elements.gapConfidenceValue.textContent = conf != null ? (typeof conf === 'number' ? conf.toFixed(2) : String(conf)) : '--';
+                    const confNum = conf != null ? (typeof conf === 'number' ? conf : parseFloat(conf) || 0) : 0;
+                    const confPct = Math.round(Math.max(0, Math.min(1, confNum)) * 100);
+                    if (elements.gapConfidenceRing) {
+                        let confClass = 'conf-high';
+                        if (confNum < 0.5) confClass = 'conf-low';
+                        else if (confNum < 0.8) confClass = 'conf-medium';
+                        const needs = payload.needs_iteration;
+                        elements.gapConfidenceRing.innerHTML = `
+                            <div class="confidence-ring ${confClass} ${needs ? 'needs-iteration' : ''}" style="--confidence: ${confPct}">
+                                <span class="confidence-ring-inner">${confPct}%</span>
+                            </div>
+                            <span class="metric-label" data-i18n="confidence">Confidence</span>`;
                     }
                     const needs = payload.needs_iteration;
                     if (elements.gapIterationValue) {
@@ -865,6 +951,25 @@ function updateProgress(data) {
                     } else if (elements.gapRecommendation) {
                         elements.gapRecommendation.classList.add('hidden');
                     }
+                    const roundIndex = state.iterationRounds.length;
+                    state.iterationRounds.push({
+                        roundIndex,
+                        confidence: confNum,
+                        gapCount: payload.request_count != null ? payload.request_count : (payload.unified_requests || []).length,
+                        status: 'completed'
+                    });
+                    state.specialistReportsByRound[roundIndex] = JSON.parse(JSON.stringify(state.specialistReports));
+                    state.iterationActiveRound = state.iterationRounds.length;
+                    if (Object.keys(state.specialistReportsByRound).length >= 2) {
+                        stateSpecialistRound = roundIndex;
+                        renderSpecialistRoundSelector();
+                    }
+                    if (elements.iterationPanel && (state.iterationRounds.length > 0 || payload.needs_iteration)) {
+                        elements.iterationPanel.classList.remove('hidden');
+                        if (elements.currentRoundEl) elements.currentRoundEl.textContent = String(state.iterationActiveRound + 1);
+                    }
+                    renderIterationTimeline();
+
                     const reqs = payload.unified_requests || [];
                     const listEl = elements.gapRequestsList;
                     if (listEl) {
@@ -890,7 +995,11 @@ function updateProgress(data) {
         const panel = elements.iterationPanel;
         if (panel) {
             panel.classList.remove('hidden');
-            if (payload.round !== undefined && elements.currentRoundEl) elements.currentRoundEl.textContent = payload.round + 1;
+            if (payload.round !== undefined) {
+                state.iterationActiveRound = payload.round;
+                if (elements.currentRoundEl) elements.currentRoundEl.textContent = String(payload.round + 1);
+                renderIterationTimeline();
+            }
             if (payload.request_type && elements.requestsList) {
                 const item = document.createElement('div');
                 item.className = 'iteration-request ' + (status === 'resolved' ? 'resolved' : 'processing');
@@ -903,6 +1012,18 @@ function updateProgress(data) {
 
     // Auto-show specialist section when analysis starts (Global UI update)
     if (phase === 'analysis' && status === 'started') {
+        const specialistAgents = ['context_hunter', 'math_specialist', 'data_auditor'];
+        if (specialistAgents.includes(agent)) {
+            // Clear this agent's report so new round stream starts fresh (avoids appending Round 2 to Round 1)
+            state.specialistReports[agent] = '';
+            renderSingleSpecialistReport(agent, '');
+            // Show round notification for Round 2+
+            const roundNum = (payload && payload.round) || 1;
+            if (roundNum > 1) {
+                const t = translations[state.uiLang] || translations.en;
+                showToast(`${t.round || 'Round'} ${roundNum} - ${t.refining_analysis || 'Refining analysis...'}`, 'info');
+            }
+        }
         const section = document.getElementById('specialistReportsSection');
         if (section && section.classList.contains('hidden')) {
             section.classList.remove('hidden');
@@ -910,6 +1031,19 @@ function updateProgress(data) {
             const toggle = document.getElementById('specialistToggle');
             if (content) content.classList.add('expanded');
             if (toggle) toggle.classList.add('expanded');
+            showSkeletonSpecialistReports();
+        }
+    }
+
+    // Flush final render when specialist completes (bypass throttle, ensure full KaTeX)
+    if (phase === 'analysis' && status === 'completed') {
+        const specialistAgents = ['context_hunter', 'math_specialist', 'data_auditor'];
+        if (specialistAgents.includes(agent)) {
+            if (specialistStreamThrottle[agent]) {
+                clearTimeout(specialistStreamThrottle[agent]);
+                specialistStreamThrottle[agent] = null;
+            }
+            renderSingleSpecialistReport(agent, state.specialistReports[agent] || '');
         }
     }
 
@@ -987,6 +1121,7 @@ function handleAnalysisComplete(data) {
 
     // Show report panel
     elements.reportPanel.classList.remove('hidden');
+    showSkeletonReport();
 
     // Update title
     if (metadata.title) {
@@ -1044,7 +1179,11 @@ function handleAnalysisComplete(data) {
     console.log('[handleAnalysisComplete] specialist_reports:', metadata.specialist_reports);
     if (metadata.specialist_reports) {
         state.specialistReports = metadata.specialist_reports;
+        if (Object.keys(state.specialistReportsByRound).length === 0) {
+            state.specialistReportsByRound[0] = metadata.specialist_reports;
+        }
         renderSpecialistReports(metadata.specialist_reports);
+        renderSpecialistRoundSelector();
     }
 
     // Render P0 features: Variable Tracking and Reproduction Checklist
@@ -1155,38 +1294,112 @@ function renderReport(lang, markdown) {
         return mathBlocks[parseInt(index)] || match;
     });
 
-    container.innerHTML = html;
+    const katexOptions = {
+        delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '\\(', right: '\\)', display: false }
+        ],
+        throwOnError: false,
+        trust: true,
+        strict: false
+    };
 
-    // Highlight code blocks
-    container.querySelectorAll('pre code').forEach(block => {
-        hljs.highlightElement(block);
-    });
+    function postProcess(root, newNodes) {
+        const scope = newNodes && newNodes.length ? newNodes : [root];
+        scope.forEach(el => {
+            el.querySelectorAll?.('pre code').forEach(block => hljs.highlightElement(block));
+        });
+        setTimeout(() => {
+            try {
+                scope.forEach(el => {
+                    if (el.nodeType === 1) renderMathInElement(el, katexOptions);
+                });
+            } catch (err) { console.error('KaTeX error:', err); }
+        }, 100);
+    }
 
-    // Render LaTeX math using KaTeX
-    // Wait a bit for DOM to settle, then render
-    setTimeout(() => {
-        try {
-            renderMathInElement(container, {
-                delimiters: [
-                    { left: '$$', right: '$$', display: true },
-                    { left: '$', right: '$', display: false },
-                    { left: '\\[', right: '\\]', display: true },
-                    { left: '\\(', right: '\\)', display: false }
-                ],
-                throwOnError: false,
-                trust: true,  // Allow commands like \text, \color, etc.
-                strict: false  // Be lenient with LaTeX grammar
-            });
-        } catch (error) {
-            console.error('KaTeX rendering error:', error);
-        }
-    }, 100);
+    applyLazyReport(container, html, postProcess);
 }
 
 
 // ============================================
 // Specialist Reports
 // ============================================
+
+function showSkeletonSpecialistReports() {
+    const specialists = ['context_hunter', 'math_specialist', 'data_auditor'];
+    specialists.forEach(agent => {
+        const container = document.querySelector(`.specialist-report[data-specialist="${agent}"]`);
+        if (container && !container.hasChildNodes()) {
+            container.innerHTML = `
+                <div class="skeleton-specialist">
+                    <div class="skeleton skeleton-report-title"></div>
+                    <div class="skeleton skeleton-report-line"></div>
+                    <div class="skeleton skeleton-report-line"></div>
+                    <div class="skeleton skeleton-report-line"></div>
+                </div>`;
+        }
+    });
+}
+
+function showSkeletonReport() {
+    document.querySelectorAll('.report-lang').forEach(container => {
+        if (container && !container.textContent.trim()) {
+            container.innerHTML = `
+                <div class="skeleton-report">
+                    <div class="skeleton skeleton-report-title"></div>
+                    <div class="skeleton skeleton-report-line"></div>
+                    <div class="skeleton skeleton-report-line"></div>
+                    <div class="skeleton skeleton-report-line"></div>
+                    <div class="skeleton skeleton-report-line"></div>
+                </div>`;
+        }
+    });
+}
+
+function showSkeletonVariableTable() {
+    const tbody = document.getElementById('variableTableBody');
+    if (tbody && tbody.children.length === 0) {
+        tbody.innerHTML = Array(5).fill(0).map(() =>
+            '<tr><td colspan="5"><div class="skeleton skeleton-table-row"></div></td></tr>'
+        ).join('');
+    }
+}
+
+function renderIterationTimeline() {
+    const el = elements.iterationTimeline;
+    if (!el) return;
+    const maxIter = elements.maxIterations ? parseInt(elements.maxIterations.value, 10) || 0 : 0;
+    if (maxIter <= 0) {
+        el.classList.add('hidden');
+        return;
+    }
+    const maxRounds = maxIter + 1;
+    el.classList.remove('hidden');
+    el.innerHTML = '';
+    for (let i = 0; i < maxRounds; i++) {
+        if (i > 0) {
+            const conn = document.createElement('div');
+            conn.className = 'iteration-timeline-connector' + (i <= state.iterationRounds.length ? ' done' : '');
+            el.appendChild(conn);
+        }
+        const node = document.createElement('div');
+        const roundData = state.iterationRounds[i];
+        let status = 'pending';
+        if (roundData) status = 'completed';
+        else if (i === state.iterationActiveRound) status = 'active';
+        node.className = `iteration-timeline-node ${status}`;
+        const conf = roundData ? Math.round(roundData.confidence * 100) : '--';
+        const gaps = roundData ? roundData.gapCount : '--';
+        const t = translations[state.uiLang] || translations.en;
+        node.innerHTML = `
+            <span class="round-num">${t.round || 'Round'} ${i + 1}</span>
+            <span class="round-stats">${status === 'completed' ? `${conf}% · ${gaps} req` : ''}</span>`;
+        el.appendChild(node);
+    }
+}
 
 function initSpecialistReports() {
     const specialistToggle = document.getElementById('specialistToggle');
@@ -1312,7 +1525,35 @@ function initSpecialistResize() {
     });
 }
 
-function renderSpecialistReports(specialistReports) {
+function renderSpecialistRoundSelector() {
+    const el = document.getElementById('specialistRoundSelector');
+    if (!el) return;
+    const rounds = Object.keys(state.specialistReportsByRound).map(Number).sort((a, b) => a - b);
+    if (rounds.length <= 1) {
+        el.classList.add('hidden');
+        return;
+    }
+    el.classList.remove('hidden');
+    const t = translations[state.uiLang] || translations.en;
+    el.innerHTML = `<span class="round-label">${t.round || 'Round'}:</span>` +
+        rounds.map(r => `<button class="specialist-round-btn ${r === stateSpecialistRound ? 'active' : ''}" data-round="${r}">${r + 1}</button>`).join('');
+    el.querySelectorAll('.specialist-round-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            stateSpecialistRound = parseInt(btn.dataset.round, 10);
+            el.querySelectorAll('.specialist-round-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.round, 10) === stateSpecialistRound));
+            const reports = state.specialistReportsByRound[stateSpecialistRound];
+            if (reports) renderSpecialistReports(reports, true);
+        });
+    });
+}
+
+function renderSpecialistReports(specialistReports, preserveRoundSelector = false) {
+    if (!preserveRoundSelector && specialistReports) {
+        const rounds = Object.keys(state.specialistReportsByRound).map(Number).sort((a, b) => a - b);
+        if (rounds.length > 1) {
+            stateSpecialistRound = rounds[rounds.length - 1];
+        }
+    }
     console.log('[renderSpecialistReports] called with:', specialistReports);
     if (!specialistReports || Object.keys(specialistReports).length === 0) {
         console.log('[renderSpecialistReports] No specialist reports, returning');
@@ -1375,31 +1616,33 @@ function renderSpecialistReports(specialistReports) {
             return mathBlocks[parseInt(index)] || match;
         });
 
-        container.innerHTML = html;
+        const katexOpts = {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false,
+            trust: true,
+            strict: false
+        };
 
-        // Highlight code blocks
-        container.querySelectorAll('pre code').forEach(block => {
-            hljs.highlightElement(block);
-        });
+        function postProcess(root, newNodes) {
+            const scope = newNodes && newNodes.length ? newNodes : [root];
+            scope.forEach(el => {
+                el.querySelectorAll?.('pre code').forEach(block => hljs.highlightElement(block));
+            });
+            setTimeout(() => {
+                try {
+                    scope.forEach(el => {
+                        if (el.nodeType === 1) renderMathInElement(el, katexOpts);
+                    });
+                } catch (err) { console.error('KaTeX error in specialist report:', err); }
+            }, 100);
+        }
 
-        // Render LaTeX math
-        setTimeout(() => {
-            try {
-                renderMathInElement(container, {
-                    delimiters: [
-                        { left: '$$', right: '$$', display: true },
-                        { left: '$', right: '$', display: false },
-                        { left: '\\[', right: '\\]', display: true },
-                        { left: '\\(', right: '\\)', display: false }
-                    ],
-                    throwOnError: false,
-                    trust: true,
-                    strict: false
-                });
-            } catch (error) {
-                console.error('KaTeX rendering error in specialist report:', error);
-            }
-        }, 100);
+        applyLazyReport(container, html, postProcess);
     });
 
     // Show the section
@@ -1428,33 +1671,79 @@ function renderP0Features(variableTracking, reproductionChecklist) {
     }
 }
 
+function renderVariableRow(v) {
+    return `<tr>
+        <td>${escapeHtml(v.symbol || '')}</td>
+        <td>${escapeHtml(v.name || '')}</td>
+        <td>${escapeHtml(v.definition || '')}</td>
+        <td>${escapeHtml(v.location || '')}</td>
+        <td>${escapeHtml(v.value || '-')}</td>
+    </tr>`;
+}
+
 function renderVariableTracking(data) {
     const panel = document.getElementById('variableTrackingPanel');
     if (!panel) return;
 
     panel.classList.remove('hidden');
 
-    // Update count badge
     const countBadge = document.getElementById('variableCount');
     if (countBadge) {
         countBadge.textContent = `(${data.variables.length})`;
     }
 
-    // Render variable table
+    const tableWrap = document.getElementById('variableTable');
     const tbody = document.getElementById('variableTableBody');
-    if (tbody && data.variables) {
-        tbody.innerHTML = data.variables.map(v => `
-            <tr>
-                <td>${escapeHtml(v.symbol || '')}</td>
-                <td>${escapeHtml(v.name || '')}</td>
-                <td>${escapeHtml(v.definition || '')}</td>
-                <td>${escapeHtml(v.location || '')}</td>
-                <td>${escapeHtml(v.value || '-')}</td>
-            </tr>
-        `).join('');
+    if (!tbody || !data.variables) return;
+
+    const useVirtualScroll = data.variables.length > VIRTUAL_SCROLL_THRESHOLD;
+    const existingScroll = tableWrap.querySelector('.variable-table-scroll');
+
+    if (!useVirtualScroll) {
+        if (existingScroll) {
+            const table = existingScroll.querySelector('table');
+            if (table) tableWrap.appendChild(table);
+            existingScroll.remove();
+        }
+        tbody.innerHTML = data.variables.map(renderVariableRow).join('');
+    } else {
+        if (!existingScroll) {
+            const scrollWrap = document.createElement('div');
+            scrollWrap.className = 'variable-table-scroll';
+            const table = tableWrap.querySelector('table');
+            if (table) scrollWrap.appendChild(table);
+            tableWrap.appendChild(scrollWrap);
+        }
+        const scrollEl = tableWrap.querySelector('.variable-table-scroll');
+        if (!scrollEl) return;
+        scrollEl._variables = data.variables;
+        scrollEl._filtered = data.variables;
+
+        function renderVirtual() {
+            const vars = scrollEl._filtered || scrollEl._variables;
+            const total = vars.length;
+            const scrollTop = scrollEl.scrollTop;
+            const visibleCount = Math.ceil(scrollEl.clientHeight / VIRTUAL_ROW_HEIGHT) + 2;
+            const startIdx = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - 1);
+            const endIdx = Math.min(total, startIdx + visibleCount);
+            const topHeight = startIdx * VIRTUAL_ROW_HEIGHT;
+            const bottomHeight = (total - endIdx) * VIRTUAL_ROW_HEIGHT;
+            let html = '';
+            if (topHeight > 0) html += `<tr class="virtual-spacer"><td colspan="5" style="height:${topHeight}px"></td></tr>`;
+            for (let i = startIdx; i < endIdx; i++) html += renderVariableRow(vars[i]);
+            if (bottomHeight > 0) html += `<tr class="virtual-spacer"><td colspan="5" style="height:${bottomHeight}px"></td></tr>`;
+            tbody.innerHTML = html;
+        }
+        scrollEl._renderVirtual = renderVirtual;
+
+        let scrollRaf = null;
+        scrollEl.addEventListener('scroll', () => {
+            if (scrollRaf) cancelAnimationFrame(scrollRaf);
+            scrollRaf = requestAnimationFrame(() => { renderVirtual(); scrollRaf = null; });
+        });
+        renderVirtual();
     }
 
-    // Render dependency graph
     const graphContainer = document.getElementById('dependencyGraph');
     const graphContent = document.getElementById('dependencyGraphContent');
     if (graphContainer && graphContent && data.dependency_graph) {
@@ -1462,30 +1751,41 @@ function renderVariableTracking(data) {
         graphContent.textContent = data.dependency_graph;
     }
 
-    // Setup toggle
     const toggle = document.getElementById('variableToggle');
     const content = document.getElementById('variableContent');
     if (toggle && content) {
-        toggle.addEventListener('click', () => {
+        toggle.onclick = () => {
             toggle.classList.toggle('expanded');
             content.classList.toggle('expanded');
-        });
-        // Auto-expand by default
+        };
         toggle.classList.add('expanded');
         content.classList.add('expanded');
     }
 
-    // Setup search
     const searchInput = document.getElementById('variableSearch');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const rows = tbody.querySelectorAll('tr');
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(query) ? '' : 'none';
-            });
-        });
+    if (searchInput && tbody) {
+        searchInput.oninput = () => {
+            const query = (searchInput.value || '').toLowerCase();
+            if (useVirtualScroll) {
+                const scrollEl = tableWrap?.querySelector('.variable-table-scroll');
+                if (scrollEl && scrollEl._variables) {
+                    scrollEl._filtered = query
+                        ? scrollEl._variables.filter(v => {
+                            const s = [v.symbol, v.name, v.definition, v.location, v.value]
+                                .join(' ').toLowerCase();
+                            return s.includes(query);
+                        })
+                        : scrollEl._variables;
+                    scrollEl.scrollTop = 0;
+                    if (scrollEl._renderVirtual) scrollEl._renderVirtual();
+                }
+            } else {
+                tbody.querySelectorAll('tr').forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    row.style.display = text.includes(query) ? '' : 'none';
+                });
+            }
+        };
     }
 }
 
@@ -1600,7 +1900,48 @@ function renderCodeAvailability(data) {
 
 function renderRiskAssessment(data) {
     const container = document.getElementById('riskTable');
+    const dashboard = document.getElementById('riskDashboard');
     if (!container || !data || data.length === 0) return;
+
+    const t = translations[state.uiLang] || translations.en;
+    const reproLabel = t.reproducibility_score || 'Reproducibility';
+
+    let lowCount = 0, mediumCount = 0, highCount = 0;
+
+    data.forEach(row => {
+        const level = (row.level || 'unknown').toLowerCase();
+        if (level.includes('low') || level.includes('🟢')) lowCount++;
+        else if (level.includes('medium') || level.includes('🟡')) mediumCount++;
+        else if (level.includes('high') || level.includes('🔴')) highCount++;
+    });
+
+    const score = Math.max(0, Math.min(100, 100 - highCount * 25 - mediumCount * 10));
+    let scoreClass = 'score-high';
+    if (score < 50) scoreClass = 'score-low';
+    else if (score < 80) scoreClass = 'score-medium';
+
+    if (dashboard) {
+        dashboard.classList.remove('hidden');
+        dashboard.innerHTML = `
+            <div class="risk-score-gauge">
+                <span class="risk-score-value ${scoreClass}">${score}</span>
+                <span class="risk-score-label">${reproLabel}</span>
+            </div>
+            <div class="risk-factors-gauges">
+                ${data.map(row => {
+                    const level = (row.level || 'unknown').toLowerCase();
+                    const fillClass = level.includes('low') || level.includes('🟢') ? 'low' :
+                        level.includes('medium') || level.includes('🟡') ? 'medium' :
+                        level.includes('high') || level.includes('🔴') ? 'high' : 'medium';
+                    const name = (row.risk || row.name || 'Risk').substring(0, 12);
+                    return `
+                        <div class="risk-factor-gauge">
+                            <div class="risk-gauge-bar"><div class="risk-gauge-fill ${fillClass}"></div></div>
+                            <span class="risk-factor-name" title="${escapeHtml(row.risk || row.name || '')}">${escapeHtml(name)}</span>
+                        </div>`;
+                }).join('')}
+            </div>`;
+    }
 
     let html = '<table><thead><tr><th>Risk</th><th>Level</th><th>Reason</th></tr></thead><tbody>';
 
@@ -2003,6 +2344,7 @@ function renderHistoryList(reports) {
         return;
     }
 
+    const t = translations[state.uiLang] || translations.en;
     reports.forEach(report => {
         const item = document.createElement('div');
         item.className = 'history-item';
@@ -2012,16 +2354,49 @@ function renderHistoryList(reports) {
         const dateStr = date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
         item.innerHTML = `
-            <div class="history-item-title">${escapeHtml(report.title)}</div>
-            <div class="history-item-meta">
-                <span><i class="fas fa-clock"></i> ${dateStr}</span>
-                <span><i class="fas fa-comments"></i> ${report.chat_count || 0}</span>
+            <div class="history-item-content">
+                <div class="history-item-title">${escapeHtml(report.title)}</div>
+                <div class="history-item-meta">
+                    <span><i class="fas fa-clock"></i> ${dateStr}</span>
+                    <span><i class="fas fa-comments"></i> ${report.chat_count || 0}</span>
+                </div>
             </div>
+            <button type="button" class="history-item-delete" title="${escapeHtml(t.delete)}" aria-label="${escapeHtml(t.delete)}">
+                <i class="fas fa-trash-alt"></i>
+            </button>
         `;
 
-        item.addEventListener('click', () => loadReport(report.id));
+        const contentEl = item.querySelector('.history-item-content');
+        const deleteBtn = item.querySelector('.history-item-delete');
+        contentEl.addEventListener('click', () => loadReport(report.id));
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteHistoryItem(report.id, item);
+        });
         elements.historyList.appendChild(item);
     });
+}
+
+async function deleteHistoryItem(reportId, itemEl) {
+    try {
+        const response = await fetch(`/api/reports/${reportId}`, { method: 'DELETE' });
+        if (!response.ok) {
+            showToast('删除失败', 'error');
+            return;
+        }
+        itemEl.remove();
+        if (state.reportId === reportId) {
+            state.reportId = null;
+            elements.landingSection.classList.remove('hidden');
+            elements.analysisSection.classList.add('hidden');
+            elements.reportPanel.classList.add('hidden');
+            elements.chatSection.classList.add('hidden');
+        }
+        showToast('已删除', 'success');
+    } catch (err) {
+        console.error('Failed to delete report:', err);
+        showToast('删除失败', 'error');
+    }
 }
 
 function filterHistory(query) {

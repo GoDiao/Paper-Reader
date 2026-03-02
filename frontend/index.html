@@ -32,7 +32,7 @@
     <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <div class="logo">
+            <div class="logo" id="logoBtn" style="cursor: pointer;">
                 <i class="fas fa-book-reader"></i>
                 <span>Paper Reader</span>
             </div>
@@ -159,7 +159,12 @@
         <section id="analysisSection" class="analysis-section hidden">
             <!-- Progress Panel -->
             <div class="progress-panel">
-                <h2><i class="fas fa-tasks"></i> <span data-i18n="analysis_progress">Analysis Progress</span></h2>
+                <div class="progress-panel-header">
+                    <h2><i class="fas fa-tasks"></i> <span data-i18n="analysis_progress">Analysis Progress</span></h2>
+                    <button id="cancelAnalysisBtn" class="btn btn-secondary btn-sm" type="button">
+                        <i class="fas fa-times"></i> <span data-i18n="cancel">Cancel</span>
+                    </button>
+                </div>
                 <div id="progressSteps" class="progress-steps">
                     <!-- Phase 1: Parsing -->
                     <div class="progress-step" data-phase="parsing">
@@ -235,10 +240,12 @@
                     <h3><i class="fas fa-search-plus"></i> <span data-i18n="gap_agent_review">Gap Agent Review</span></h3>
                     <div id="gapAgentStatus" class="gap-agent-status"></div>
                     <div id="gapAgentResult" class="gap-agent-result hidden">
-                        <div class="gap-metrics">
-                            <span class="gap-metric" id="gapConfidence"><span class="metric-label" data-i18n="confidence">Confidence</span>: <span id="gapConfidenceValue">--</span></span>
-                            <span class="gap-metric" id="gapIteration"><span class="metric-label" data-i18n="needs_iteration">Needs Iteration</span>: <span id="gapIterationValue">--</span></span>
-                            <span class="gap-metric" id="gapRequestCount"><span class="metric-label" data-i18n="requests_found">Requests</span>: <span id="gapRequestCountValue">0</span></span>
+                        <div class="gap-metrics gap-metrics-row">
+                            <div id="gapConfidenceRing" class="confidence-ring-wrapper"></div>
+                            <div class="gap-metrics-text">
+                                <span class="gap-metric" id="gapIteration"><span class="metric-label" data-i18n="needs_iteration">Needs Iteration</span>: <span id="gapIterationValue">--</span></span>
+                                <span class="gap-metric" id="gapRequestCount"><span class="metric-label" data-i18n="requests_found">Requests</span>: <span id="gapRequestCountValue">0</span></span>
+                            </div>
                         </div>
                         <div id="gapRecommendation" class="gap-recommendation"></div>
                         <div id="gapRequestsList" class="gap-requests-list"></div>
@@ -246,6 +253,7 @@
                 </div>
                 <div id="iterationPanel" class="iteration-panel hidden">
                     <h3><i class="fas fa-sync-alt"></i> <span data-i18n="iteration_analysis">Iterative Analysis</span></h3>
+                    <div id="iterationTimeline" class="iteration-timeline hidden"></div>
                     <div class="iteration-round">
                         <span class="round-label"><span data-i18n="round">Round</span> <span id="currentRound">1</span>/<span id="maxRounds">2</span></span>
                     </div>
@@ -264,6 +272,7 @@
                     <i class="fas fa-chevron-down specialist-chevron"></i>
                 </div>
                 <div class="specialist-content" id="specialistContent">
+                    <div id="specialistRoundSelector" class="specialist-round-selector hidden"></div>
                     <div class="specialist-tabs">
                         <button class="specialist-tab-btn active" data-specialist="context_hunter">
                             <i class="fas fa-search"></i> Context Hunter
@@ -364,6 +373,7 @@
                         <!-- Risk Assessment -->
                         <div class="checklist-section" id="riskSection">
                             <h4><i class="fas fa-exclamation-triangle"></i> <span data-i18n="risk_assessment">Risk Assessment</span></h4>
+                            <div id="riskDashboard" class="risk-dashboard hidden"></div>
                             <div id="riskTable" class="risk-table"></div>
                         </div>
                     </div>

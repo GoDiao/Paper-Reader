@@ -296,11 +296,14 @@ class ProgressCallback:
     def architect_completed(self, domain: str):
         self.emit("analysis", "architect", "completed", f"Reading plan created. Domain: {domain}", 100)
     
-    def specialist_started(self, name: str):
-        self.emit("analysis", name, "started", f"{name} analyzing...", 0)
-    
-    def specialist_completed(self, name: str):
-        self.emit("analysis", name, "completed", f"{name} completed", 100)
+    def specialist_started(self, name: str, round_num: int = 1):
+        data = {"round": round_num} if round_num > 1 else None
+        msg = f"{name} analyzing..." if round_num <= 1 else f"{name} analyzing (Round {round_num})..."
+        self.emit("analysis", name, "started", msg, 0, data)
+
+    def specialist_completed(self, name: str, round_num: int = 1):
+        data = {"round": round_num} if round_num > 1 else None
+        self.emit("analysis", name, "completed", f"{name} completed", 100, data)
     
     def editor_started(self, lang: str):
         agent = f"editor_{lang}"
