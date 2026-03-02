@@ -562,6 +562,160 @@ select {
     color: var(--text-muted);
 }
 
+.iteration-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.iteration-panel.hidden {
+    display: none;
+}
+
+.iteration-panel h3 {
+    font-size: 0.9375rem;
+    margin: 0 0 0.5rem 0;
+    color: var(--text-main);
+}
+
+.iteration-round .round-label {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.requests-list {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.iteration-request {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-surface-hover);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--primary);
+}
+
+.iteration-request.resolved {
+    border-left-color: var(--success);
+}
+
+.iteration-request .req-type {
+    font-weight: 600;
+    color: var(--primary-light);
+    margin-right: 0.5rem;
+}
+
+.iteration-request .req-content {
+    color: var(--text-secondary);
+}
+
+.iteration-request .req-status {
+    margin-left: 0.5rem;
+    color: var(--success);
+}
+
+/* Gap Agent panel */
+.gap-agent-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.gap-agent-panel.hidden {
+    display: none;
+}
+
+.gap-agent-panel h3 {
+    font-size: 0.9375rem;
+    margin: 0 0 0.5rem 0;
+    color: var(--text-main);
+}
+
+.gap-agent-status {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.gap-status-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.gap-status-done {
+    color: var(--success);
+}
+
+.gap-agent-result {
+    margin-top: 0.75rem;
+}
+
+.gap-agent-result.hidden {
+    display: none;
+}
+
+.gap-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.8125rem;
+}
+
+.gap-metric .metric-label {
+    color: var(--text-muted);
+}
+
+.gap-metric .value-yes {
+    color: var(--primary-light);
+}
+
+.gap-metric .value-no {
+    color: var(--success);
+}
+
+.gap-recommendation {
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.gap-recommendation.hidden {
+    display: none;
+}
+
+.gap-requests-list {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gap-requests-list.hidden {
+    display: none;
+}
+
+.gap-request-item {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-surface-hover);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--primary);
+}
+
+.gap-request-item .req-type {
+    font-weight: 600;
+    color: var(--primary-light);
+    margin-right: 0.5rem;
+}
+
 /* ============================================
    Report Panel
    ============================================ */

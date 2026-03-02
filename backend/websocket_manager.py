@@ -143,6 +143,59 @@ class WebSocketManager:
         }
         await self._send_to_session(session_id, json.dumps(event))
 
+    async def send_gap_agent_progress(
+        self,
+        session_id: str,
+        status: str,
+        result: Optional[Dict] = None,
+    ):
+        """Send Gap Agent review progress event."""
+        await self.send_progress(
+            session_id,
+            phase="gap_review",
+            agent="gap_agent",
+            status=status,
+            message=f"Gap Agent: {status}",
+            progress=0 if status == "started" else 100,
+            data=result or {},
+        )
+
+    async def send_iteration_info(
+        self,
+        session_id: str,
+        round_num: int,
+        request: Any,
+        status: str,
+    ):
+        """Send iterative analysis request event (pending, processing, resolved)."""
+        req_dict = (
+            {
+                "request_id": getattr(request, "request_id", ""),
+                "requester": getattr(request, "requester", ""),
+                "request_type": getattr(request, "request_type", ""),
+                "content": (getattr(request, "content", "") or "")[:200],
+                "priority": getattr(request, "priority", "medium"),
+            }
+            if request is not None
+            else {}
+        )
+        message = f"Round {round_num}: {req_dict.get('request_type', '')} - {req_dict.get('content', '')[:80]}"
+        await self.send_progress(
+            session_id,
+            phase="iteration",
+            agent=req_dict.get("requester", ""),
+            status=status,
+            message=message,
+            progress=50 if status == "processing" else (100 if status == "resolved" else 0),
+            data={
+                "round": round_num,
+                "request_id": req_dict.get("request_id"),
+                "request_type": req_dict.get("request_type"),
+                "content": req_dict.get("content"),
+                "priority": req_dict.get("priority"),
+            },
+        )
+
     async def _send_to_session(self, session_id: str, message: str):
         """Send message to a specific session."""
         async with self._lock:
@@ -256,3 +309,59 @@ class ProgressCallback:
     def editor_completed(self, lang: str, char_count: int):
         agent = f"editor_{lang}"
         self.emit("assembly", agent, "completed", f"{lang} report: {char_count:,} chars", 100)
+
+    def gap_agent_started(self):
+        """Emit Gap Agent review start event."""
+        self.emit("gap_review", "gap_agent", "started", "Reviewing specialist reports...", 0)
+
+    def gap_agent_completed(self, result: Any):
+        """Emit Gap Agent review completion event."""
+        requests = getattr(result, "unified_requests", None) or []
+        data = {
+            "needs_iteration": getattr(result, "needs_iteration", False),
+            "overall_confidence": getattr(result, "overall_confidence", 1.0),
+            "request_count": len(requests),
+            "recommendation": getattr(result, "iteration_recommendation", None) or "",
+            "unified_requests": [
+                {
+                    "request_type": getattr(r, "request_type", ""),
+                    "requester": getattr(r, "requester", ""),
+                    "content": (getattr(r, "content", "") or "")[:150],
+                }
+                for r in requests
+            ],
+        }
+        self.emit(
+            "gap_review",
+            "gap_agent",
+            "completed",
+            f"Review complete. Confidence: {data['overall_confidence']:.2f}",
+            100,
+            data,
+        )
+
+    def request_processing(self, request: Any):
+        """Emit iteration request processing (thread-safe)."""
+        if self._loop is None:
+            return
+        round_num = getattr(request, "_round", 1)
+        coro = self.manager.send_iteration_info(
+            self.session_id, round_num, request, "processing"
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except Exception as e:
+            logger.warning(f"Failed to emit request_processing: {e}")
+
+    def request_resolved(self, request: Any):
+        """Emit iteration request resolved (thread-safe)."""
+        if self._loop is None:
+            return
+        round_num = getattr(request, "_round", 1)
+        coro = self.manager.send_iteration_info(
+            self.session_id, round_num, request, "resolved"
+        )
+        try:
+            asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except Exception as e:
+            logger.warning(f"Failed to emit request_resolved: {e}")

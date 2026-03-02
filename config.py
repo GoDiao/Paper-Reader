@@ -222,13 +222,68 @@ class WebSearchConfig(BaseModel):
         )
 
 
+class IterationConfig(BaseModel):
+    """Iterative analysis configuration."""
+
+    enable_iteration: bool = Field(
+        default=False,
+        description="Enable iterative analysis (experts can request more info)",
+    )
+    max_iterations: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum iteration rounds",
+    )
+    confidence_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold to trigger iteration",
+    )
+    request_timeout: int = Field(
+        default=30,
+        description="Timeout (seconds) for processing each request",
+    )
+    auto_approve_requests: bool = Field(
+        default=True,
+        description="Automatically approve all requests (vs user approval)",
+    )
+
+
+class GapAgentConfig(BaseModel):
+    """Gap Agent configuration."""
+
+    enable_gap_agent: bool = Field(
+        default=True,
+        description="Enable Gap Agent review between specialist rounds",
+    )
+    gap_agent_model: str = Field(
+        default="deepseek-chat",
+        description="Model to use for Gap Agent (can be a cheaper model)",
+    )
+    confidence_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Iteration is recommended when overall confidence is below this threshold",
+    )
+    max_requests_per_round: int = Field(
+        default=5,
+        ge=0,
+        description="Maximum number of unified requests per iteration round",
+    )
+
+
 class AppConfig(BaseModel):
     """Main Application Configuration"""
-    
+
     llm: LLMConfig = Field(default_factory=LLMConfig)
     parser: ParserConfig = Field(default_factory=ParserConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     web_search: WebSearchConfig = Field(default_factory=WebSearchConfig)
+    iteration: IterationConfig = Field(default_factory=IterationConfig)
+    gap_agent: GapAgentConfig = Field(default_factory=GapAgentConfig)
     
     @classmethod
     def from_args(

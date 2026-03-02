@@ -73,6 +73,7 @@ class AnalysisRequest(BaseModel):
     parser: str = "auto"  # "auto", "mineru", "pymupdf"
     language: str = "en"  # "en" or "zh"
     enable_web_search: bool = False
+    max_iterations: int = 0  # 0 = off, 1-5 = iterative analysis rounds
 
 
 class ChatRequest(BaseModel):
@@ -272,7 +273,8 @@ async def run_analysis(
     verbose: bool,
     parser_type: str = "auto",
     enable_web_search: bool = None,
-    language: str = "en"
+    language: str = "en",
+    max_iterations: int = 0,
 ):
     """Background task to run paper analysis with WebSocket updates."""
     try:
@@ -326,25 +328,30 @@ async def run_analysis(
                         from parsers.pdf_parser import ParsedDocument
                         parsed_doc = ParsedDocument.from_dict(data)
                     
-                    # Copy cached images to current output directory
-                    cached_images_dir = cache_dir / "images"
-                    if cached_images_dir.exists():
-                        for img_file in cached_images_dir.glob("*"):
-                            shutil.copy2(img_file, images_dir)
-                    
-                    # Copy figure index if exists
-                    cached_fig_index = cache_dir / "figure_index.json"
-                    if cached_fig_index.exists():
-                        shutil.copy2(cached_fig_index, output_dir)
+                    # Skip cache if it has no content (avoid stale empty parses)
+                    if not (parsed_doc.markdown_content or parsed_doc.raw_text or "").strip():
+                        logger.warning("Cached parse has 0 content; invalidating and re-parsing")
+                        parsed_doc = None
+                    else:
+                        # Copy cached images to current output directory
+                        cached_images_dir = cache_dir / "images"
+                        if cached_images_dir.exists():
+                            for img_file in cached_images_dir.glob("*"):
+                                shutil.copy2(img_file, images_dir)
                         
-                    cache_hit = True
-                    logger.info("Successfully restored from cache")
-                    
-                    await ws_manager.send_progress(
-                        session_id, "parsing", "pdf_parser", "completed",
-                        f"Parsed (Cached): {parsed_doc.title or 'Untitled'}", 100,
-                        {"title": parsed_doc.title, "image_count": len(parsed_doc.images)}
-                    )
+                        # Copy figure index if exists
+                        cached_fig_index = cache_dir / "figure_index.json"
+                        if cached_fig_index.exists():
+                            shutil.copy2(cached_fig_index, output_dir)
+                            
+                        cache_hit = True
+                        logger.info("Successfully restored from cache")
+                        
+                        await ws_manager.send_progress(
+                            session_id, "parsing", "pdf_parser", "completed",
+                            f"Parsed (Cached): {parsed_doc.title or 'Untitled'}", 100,
+                            {"title": parsed_doc.title, "image_count": len(parsed_doc.images)}
+                        )
                     
                 except Exception as e:
                     logger.warning(f"Failed to restore from cache: {e}")
@@ -355,8 +362,14 @@ async def run_analysis(
             # Normal parsing
             parsed_doc = parser.parse(pdf_path, images_dir, parser_backend=parser_type)
             
-            # Save to cache if we have a hash
-            if file_hash:
+            # Don't cache empty parses (0 content) - they may be from transient parser issues
+            # or scanned PDFs; caching would prevent retrying with different backends
+            is_empty = not (parsed_doc.markdown_content or parsed_doc.raw_text or "").strip()
+            if is_empty:
+                logger.warning("Parse produced 0 characters; not caching. PDF may be scanned or need OCR.")
+            
+            # Save to cache if we have a hash and parse has content
+            if file_hash and not is_empty:
                 try:
                     cache_dir = DATA_DIR / "parse_cache" / f"{file_hash}_{parser_type}"
                     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -365,12 +378,13 @@ async def run_analysis(
                     with open(cache_dir / "parsed.json", "w", encoding="utf-8") as f:
                         json.dump(parsed_doc.to_dict(), f, ensure_ascii=False, indent=2)
                     
-                    # Copy images to cache
+                    # Copy images to cache (files only; skip MinerU subdirs that may be locked)
                     cached_images_dir = cache_dir / "images"
                     cached_images_dir.mkdir(exist_ok=True)
                     if images_dir.exists():
                         for img_file in images_dir.glob("*"):
-                            shutil.copy2(img_file, cached_images_dir)
+                            if img_file.is_file():
+                                shutil.copy2(img_file, cached_images_dir)
                     
                     # Save figure index to cache (will be generated next)
                     # We'll copy it after generation
@@ -432,7 +446,8 @@ async def run_analysis(
                 images=parsed_doc.images,
                 figure_index_path=figure_index_path if figure_index_path.exists() else None,
                 progress_callback=progress_callback,
-                language=language
+                language=language,
+                max_iterations=max_iterations,
             )
             
             # Note: Progress events are now emitted by orchestrator via progress_callback
@@ -649,9 +664,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 parser = message.get("parser", "auto")
                 enable_web_search = message.get("enable_web_search")
                 language = message.get("language", "en")
-                
+                max_iterations = message.get("max_iterations", 0)
                 asyncio.create_task(
-                    run_analysis(upload_id, session_id, mode, provider, model, verbose, parser, enable_web_search, language)
+                    run_analysis(
+                        upload_id, session_id, mode, provider, model, verbose,
+                        parser, enable_web_search, language, max_iterations,
+                    )
                 )
                 
     except WebSocketDisconnect:

@@ -41,6 +41,18 @@ const translations = {
         parser_auto: 'Auto (Default)',
         enable_web_search: 'Enable Web Search',
         enable_web_search_hint: 'Search GitHub/HuggingFace for reproduction resources (code, models, datasets)',
+        max_iterations: 'Iterative Analysis',
+        iteration_off: 'Off',
+        iteration_1: '1 round',
+        iteration_2: '2 rounds',
+        iteration_hint: 'Experts can request more info; extra rounds resolve requests',
+        iteration_analysis: 'Iterative Analysis',
+        gap_agent: 'Gap Agent',
+        gap_agent_review: 'Gap Agent Review',
+        confidence: 'Confidence',
+        needs_iteration: 'Needs Iteration',
+        requests_found: 'Requests',
+        round: 'Round',
         output_language: 'Output Language',
         language_en: 'English',
         language_zh: 'Chinese',
@@ -125,6 +137,18 @@ const translations = {
         parser_auto: '自动 (默认)',
         enable_web_search: '启用网络搜索',
         enable_web_search_hint: '搜索 GitHub/HuggingFace 获取复现资源（代码、模型、数据集）',
+        max_iterations: '迭代分析',
+        iteration_off: '关闭',
+        iteration_1: '1 轮',
+        iteration_2: '2 轮',
+        iteration_hint: '专家可请求更多信息，额外轮次用于解析请求',
+        iteration_analysis: '迭代分析',
+        gap_agent: 'Gap Agent',
+        gap_agent_review: 'Gap Agent 审查',
+        confidence: '置信度',
+        needs_iteration: '需要迭代',
+        requests_found: '请求数',
+        round: '轮次',
         output_language: '输出语言',
         language_en: '英语',
         language_zh: '中文',
@@ -225,10 +249,23 @@ const elements = {
     parserBackend: document.getElementById('parserBackend'),
     outputLanguage: document.getElementById('outputLanguage'),
     enableWebSearch: document.getElementById('enableWebSearch'),
+    maxIterations: document.getElementById('maxIterations'),
 
     // Analysis
     analysisSection: document.getElementById('analysisSection'),
     progressSteps: document.getElementById('progressSteps'),
+    gapAgentPanel: document.getElementById('gapAgentPanel'),
+    gapAgentStatus: document.getElementById('gapAgentStatus'),
+    gapAgentResult: document.getElementById('gapAgentResult'),
+    gapConfidenceValue: document.getElementById('gapConfidenceValue'),
+    gapIterationValue: document.getElementById('gapIterationValue'),
+    gapRequestCountValue: document.getElementById('gapRequestCountValue'),
+    gapRecommendation: document.getElementById('gapRecommendation'),
+    gapRequestsList: document.getElementById('gapRequestsList'),
+    iterationPanel: document.getElementById('iterationPanel'),
+    requestsList: document.getElementById('requestsList'),
+    currentRoundEl: document.getElementById('currentRound'),
+    maxRoundsEl: document.getElementById('maxRounds'),
 
     // Report
     reportPanel: document.getElementById('reportPanel'),
@@ -532,6 +569,22 @@ function startAnalysis() {
     landingSection.classList.add('hidden');
     analysisSection.classList.remove('hidden');
 
+    // Reset iteration panel
+    if (elements.iterationPanel) {
+        elements.iterationPanel.classList.add('hidden');
+        if (elements.requestsList) elements.requestsList.innerHTML = '';
+        const maxIter = elements.maxIterations ? parseInt(elements.maxIterations.value, 10) || 0 : 0;
+        if (elements.currentRoundEl) elements.currentRoundEl.textContent = '1';
+        if (elements.maxRoundsEl) elements.maxRoundsEl.textContent = String(maxIter);
+    }
+
+    // Reset Gap Agent panel
+    if (elements.gapAgentPanel) {
+        elements.gapAgentPanel.classList.add('hidden');
+        if (elements.gapAgentStatus) elements.gapAgentStatus.innerHTML = '';
+        if (elements.gapAgentResult) elements.gapAgentResult.classList.add('hidden');
+    }
+
     // Connect WebSocket
     state.specialistReports = {}; // Reset reports
     connectWebSocket();
@@ -548,6 +601,7 @@ function connectWebSocket() {
 
         // Send analysis request
         const enableWebSearch = elements.enableWebSearch ? elements.enableWebSearch.checked : false;
+        const maxIterations = elements.maxIterations ? parseInt(elements.maxIterations.value, 10) || 0 : 0;
         state.websocket.send(JSON.stringify({
             type: 'analyze',
             upload_id: state.uploadId,
@@ -557,7 +611,8 @@ function connectWebSocket() {
             verbose: false,
             parser: elements.parserBackend ? elements.parserBackend.value : 'auto',
             enable_web_search: enableWebSearch,
-            language: elements.outputLanguage ? elements.outputLanguage.value : 'en'
+            language: elements.outputLanguage ? elements.outputLanguage.value : 'en',
+            max_iterations: maxIterations
         }));
     };
 
@@ -775,7 +830,76 @@ function renderSingleSpecialistReport(agent, markdown) {
 }
 
 function updateProgress(data) {
-    const { phase, agent, status, message } = data;
+    const { phase, agent, status, message, data: payload } = data;
+
+    // Gap Agent phase: show dedicated panel with review status and result
+    if (phase === 'gap_review') {
+        const panel = elements.gapAgentPanel;
+        if (panel) {
+            panel.classList.remove('hidden');
+            if (status === 'started') {
+                if (elements.gapAgentStatus) {
+                    elements.gapAgentStatus.innerHTML = '<span class="gap-status-loading"><i class="fas fa-spinner fa-spin"></i> Reviewing specialist reports...</span>';
+                }
+                if (elements.gapAgentResult) elements.gapAgentResult.classList.add('hidden');
+            } else if (status === 'completed' && payload) {
+                if (elements.gapAgentStatus) {
+                    elements.gapAgentStatus.innerHTML = '<span class="gap-status-done"><i class="fas fa-check-circle"></i> Review complete</span>';
+                }
+                if (elements.gapAgentResult) {
+                    elements.gapAgentResult.classList.remove('hidden');
+                    const conf = payload.overall_confidence;
+                    if (elements.gapConfidenceValue) {
+                        elements.gapConfidenceValue.textContent = conf != null ? (typeof conf === 'number' ? conf.toFixed(2) : String(conf)) : '--';
+                    }
+                    const needs = payload.needs_iteration;
+                    if (elements.gapIterationValue) {
+                        elements.gapIterationValue.textContent = needs ? 'Yes' : 'No';
+                        elements.gapIterationValue.className = needs ? 'value-yes' : 'value-no';
+                    }
+                    const count = payload.request_count;
+                    if (elements.gapRequestCountValue) elements.gapRequestCountValue.textContent = count != null ? count : 0;
+                    if (elements.gapRecommendation && payload.recommendation) {
+                        elements.gapRecommendation.textContent = payload.recommendation;
+                        elements.gapRecommendation.classList.remove('hidden');
+                    } else if (elements.gapRecommendation) {
+                        elements.gapRecommendation.classList.add('hidden');
+                    }
+                    const reqs = payload.unified_requests || [];
+                    const listEl = elements.gapRequestsList;
+                    if (listEl) {
+                        listEl.innerHTML = '';
+                        reqs.forEach(r => {
+                            const item = document.createElement('div');
+                            item.className = 'gap-request-item';
+                            const type = r.request_type || r.requester || 'request';
+                            const content = (r.content || '').substring(0, 100);
+                            item.innerHTML = `<span class="req-type">${escapeHtml(type)}</span> <span class="req-content">${escapeHtml(content)}</span>`;
+                            listEl.appendChild(item);
+                        });
+                        listEl.classList.toggle('hidden', reqs.length === 0);
+                    }
+                }
+            }
+        }
+        // Fall through to update progress step
+    }
+
+    // Iteration phase: show panel and update requests list
+    if (phase === 'iteration' && payload) {
+        const panel = elements.iterationPanel;
+        if (panel) {
+            panel.classList.remove('hidden');
+            if (payload.round !== undefined && elements.currentRoundEl) elements.currentRoundEl.textContent = payload.round + 1;
+            if (payload.request_type && elements.requestsList) {
+                const item = document.createElement('div');
+                item.className = 'iteration-request ' + (status === 'resolved' ? 'resolved' : 'processing');
+                item.innerHTML = `<span class="req-type">${payload.request_type || ''}</span> <span class="req-content">${escapeHtml((payload.content || '').substring(0, 120))}</span> <span class="req-status">${status === 'resolved' ? '✓' : '...'}</span>`;
+                elements.requestsList.appendChild(item);
+            }
+        }
+        return;
+    }
 
     // Auto-show specialist section when analysis starts (Global UI update)
     if (phase === 'analysis' && status === 'started') {
@@ -856,6 +980,10 @@ function handleAnalysisComplete(data) {
             }
         }
     });
+
+    // Hide iteration and Gap Agent panels when complete
+    if (elements.iterationPanel) elements.iterationPanel.classList.add('hidden');
+    if (elements.gapAgentPanel) elements.gapAgentPanel.classList.add('hidden');
 
     // Show report panel
     elements.reportPanel.classList.remove('hidden');

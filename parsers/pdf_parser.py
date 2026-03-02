@@ -290,7 +290,9 @@ class PDFParser:
         console.print(f"  - Images: {len(images)} extracted")
         if table_count > 0:
             console.print(f"  - Tables: {table_count} extracted")
-        
+        if len(full_text.strip()) == 0:
+            console.print("[yellow]  ⚠ No extractable text found. The PDF may be scanned/image-based. Consider using an OCR-capable parser (e.g. MinerU with OCR mode) if the document contains important text.[/yellow]")
+
         return doc_data
     
     

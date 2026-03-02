@@ -24,6 +24,33 @@ LANG_INSTRUCTION_ZH = """
 """
 
 # =============================================================================
+# ITERATIVE ANALYSIS PROTOCOL (appended to specialist prompts)
+# Now simplified: specialists only emit tentative gap hints.
+# =============================================================================
+
+ITERATIVE_ANALYSIS_PROTOCOL = """
+
+## Output Guidelines
+
+At the end of your report, you may optionally note any information gaps you
+encountered while analyzing the paper. These are *tentative* hints only; a
+separate Gap Analyst will review all reports and decide whether formal
+requests and extra iterations are needed.
+
+Use the following format at the very end of your report if you want to provide
+gap hints:
+
+<TENTATIVE_GAPS>
+- Need more context on [specific topic]
+- Missing: [section/data/derivation]
+- Unclear claim: [short description]
+</TENTATIVE_GAPS>
+
+If you believe your analysis is already complete and coherent, you may omit
+this block entirely.
+"""
+
+# =============================================================================
 # 1. ARCHITECT - The Planner/Commander
 # =============================================================================
 
@@ -125,7 +152,7 @@ CONTEXT_HUNTER_PROMPT = """## Your Assignment from the Architect
 
 ---
 Complete your analysis now. Be thorough but concise.
-"""
+""" + ITERATIVE_ANALYSIS_PROTOCOL
 
 # =============================================================================
 # 3. MATH SPECIALIST - Method/Formula Derivation Expert
@@ -207,7 +234,7 @@ Describe how variables depend on each other in a tree format:
 [If there's a novel architecture in Figure X, explain each component]
 
 Complete your derivation analysis now. Be rigorous and educational.
-"""
+""" + ITERATIVE_ANALYSIS_PROTOCOL
 
 # =============================================================================
 # 4. DATA AUDITOR - Experiments/SOTA Comparison Specialist
@@ -325,7 +352,7 @@ Rate each risk factor as 🟢 Low / 🟡 Medium / 🔴 High:
 [Any limitations, unfair comparisons, or missing experiments?]
 
 Complete your audit now. Be objective and critical.
-"""
+""" + ITERATIVE_ANALYSIS_PROTOCOL
 
 # =============================================================================
 # 5. EDITOR - Final Assembly & Image Integration
@@ -480,5 +507,108 @@ EDITOR_CHINESE_PROMPT = """## 需要综合的专家报告
 ```
 
 现在生成最终的中文分析文档：
+"""
+
+# =============================================================================
+# 7. GAP AGENT - Cross-Specialist Gap Analyst
+# =============================================================================
+
+GAP_AGENT_SYSTEM = """You are a critical reviewer and gap analyst for a
+multi-agent academic paper analysis system.
+
+Specialists:
+- Context Hunter: background and motivation
+- Math Specialist: methods and derivations
+- Data Auditor: experiments and results
+
+Your responsibilities:
+1. Review each specialist's report for completeness and coherence
+2. Identify information gaps that prevent complete understanding
+3. Detect logical inconsistencies or missing cross-references
+4. Generate structured requests to fill these gaps
+5. Provide an overall confidence score for the current analysis state
+
+Review criteria:
+- Completeness: Does the report fully address the assigned task?
+- Coherence: Are claims and conclusions logically supported?
+- Cross-Reference Needs: Does this expert need output from others?
+"""
+
+GAP_AGENT_PROMPT = """## Paper Title: {title}
+## Domain: {domain}
+
+## Specialist Reports
+
+### Context Hunter Report
+{context_report}
+
+### Math Specialist Report
+{math_report}
+
+### Data Auditor Report
+{experiment_report}
+
+## Expert Tentative Gaps (hints)
+{tentative_gaps}
+
+## Your Task
+
+Analyze the above reports and hints, then produce:
+1. Assessment for each specialist (completeness, coherence, gaps_found, cross_ref_needs)
+2. A unified list of normalized information requests (section_needed, cross_reference,
+   clarification, figure_detail)
+3. An overall confidence score (0.0 - 1.0) for the quality of the current analysis
+4. A short iteration recommendation explaining whether another round is needed
+
+## Output Format
+
+```json
+{{
+  "assessments": {{
+    "context_hunter": {{
+      "completeness": 0.85,
+      "coherence": 0.90,
+      "gaps_found": ["Missing comparison to prior work X"],
+      "cross_ref_needs": []
+    }},
+    "math_specialist": {{
+      "completeness": 0.65,
+      "coherence": 0.75,
+      "gaps_found": ["Equation 5 derivation skipped"],
+      "cross_ref_needs": ["data_auditor"]
+    }},
+    "data_auditor": {{
+      "completeness": 0.80,
+      "coherence": 0.85,
+      "gaps_found": [],
+      "cross_ref_needs": []
+    }}
+  }},
+  "unified_requests": [
+    {{
+      "request_type": "section_needed",
+      "requester": "math_specialist",
+      "content": "Appendix A content for Theorem 3 proof",
+      "priority": "high"
+    }},
+    {{
+      "request_type": "cross_reference",
+      "requester": "data_auditor",
+      "target": "math_specialist",
+      "content": "Equation 5 derivation for loss convergence verification",
+      "priority": "high"
+    }}
+  ],
+  "overall_confidence": 0.72,
+  "needs_iteration": true,
+  "iteration_recommendation": "Missing critical derivations and cross-references. Recommend one more round focusing on Equation 5 and Appendix A."
+}}
+```
+
+Return ONLY the JSON object above. Rules:
+- No additional commentary before or after the JSON.
+- All string values must be single-line; use \\n for line breaks inside strings.
+- Escape double quotes inside strings as \\".
+- Do not add trailing commas after the last element of any object or array.
 """
 

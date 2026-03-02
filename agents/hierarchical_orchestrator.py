@@ -28,13 +28,28 @@ from config import LLMConfig
 from llm import LLMClientFactory
 
 from .hierarchical_prompts import (
-    ARCHITECT_SYSTEM, ARCHITECT_PROMPT,
-    CONTEXT_HUNTER_SYSTEM, CONTEXT_HUNTER_PROMPT,
-    MATH_SPECIALIST_SYSTEM, MATH_SPECIALIST_PROMPT,
-    DATA_AUDITOR_SYSTEM, DATA_AUDITOR_PROMPT,
-    EDITOR_SYSTEM, EDITOR_PROMPT,
-    EDITOR_CHINESE_SYSTEM, EDITOR_CHINESE_PROMPT,
+    ARCHITECT_SYSTEM,
+    ARCHITECT_PROMPT,
+    CONTEXT_HUNTER_SYSTEM,
+    CONTEXT_HUNTER_PROMPT,
+    MATH_SPECIALIST_SYSTEM,
+    MATH_SPECIALIST_PROMPT,
+    DATA_AUDITOR_SYSTEM,
+    DATA_AUDITOR_PROMPT,
+    EDITOR_SYSTEM,
+    EDITOR_PROMPT,
+    EDITOR_CHINESE_SYSTEM,
+    EDITOR_CHINESE_PROMPT,
+    GAP_AGENT_SYSTEM,
+    GAP_AGENT_PROMPT,
 )
+from .iteration_protocol import (
+    InformationRequest,
+    IterationState,
+    SpecialistOutput,
+    TentativeGap,
+)
+from .gap_agent import GapAnalysisResult, ExpertAssessment
 
 console = Console()
 
@@ -157,113 +172,156 @@ class HierarchicalOrchestrator:
         abstract: str = "",
         total_pages: int = 0,
         images: List[Any] = None,
-        figure_index_path: Optional[Path] = None,  # NEW: Path to figure_index.json
-        progress_callback = None,  # NEW: Callback for progress updates
-        language: str = "en"  # NEW: Output language
+        figure_index_path: Optional[Path] = None,
+        progress_callback = None,
+        language: str = "en",
+        max_iterations: int = 0,
     ) -> HierarchicalAnalysisResult:
         """
         Execute the complete hierarchical analysis pipeline.
-        
-        Args:
-            content: Full paper markdown content
-            title: Paper title
-            headers: List of section headers
-            abstract: Paper abstract
-            total_pages: Total page count
-            images: List of extracted images
-            figure_index_path: Path to figure_index.json for detailed figure info
-            progress_callback: Optional callback for WebSocket progress updates
-            language: Output language ("en" or "zh")
-            
-        Returns:
-            HierarchicalAnalysisResult with complete analysis
+        When max_iterations > 0, runs iterative analysis (experts can request more info).
+        """
+        return self.analyze_paper_iterative(
+            content=content,
+            title=title,
+            headers=headers,
+            abstract=abstract,
+            total_pages=total_pages,
+            images=images,
+            figure_index_path=figure_index_path,
+            progress_callback=progress_callback,
+            language=language,
+            max_iterations=max_iterations,
+        )
+
+    def analyze_paper_iterative(
+        self,
+        content: str,
+        title: str = "",
+        headers: List[str] = None,
+        abstract: str = "",
+        total_pages: int = 0,
+        images: List[Any] = None,
+        figure_index_path: Optional[Path] = None,
+        progress_callback = None,
+        language: str = "en",
+        max_iterations: int = 2,
+    ) -> HierarchicalAnalysisResult:
+        """
+        Execute hierarchical analysis with optional iterative rounds.
+        Experts may emit tentative gap hints; a separate Gap Agent reviews all
+        reports, converts gaps into unified information requests, and those
+        requests are resolved and fed back in the next round (up to
+        max_iterations).
         """
         result = HierarchicalAnalysisResult(title=title)
-        
-        # Store progress callback for use in _call_llm
         self.progress_callback = progress_callback
-        
-        # Extract abstract if not provided
+
         if not abstract:
             abstract = self._extract_abstract(content)
-        
-        # Extract headers if not provided
         if not headers:
             headers = self._extract_headers(content)
-        
+
         console.print("\n[bold]═══ Phase 1: Architect Planning ═══[/bold]")
-        
-        # Emit progress: Architect started
         if progress_callback:
             progress_callback.architect_started()
-        
-        # Step 1: Architect creates reading plan
+
         result.reading_plan = self._run_architect(
             title=title,
             abstract=abstract,
             headers=headers,
             total_pages=total_pages,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
         )
         result.domain = result.reading_plan.domain
-        
         console.print(f"[green]✓[/green] Domain identified: {result.domain}")
         console.print(f"[green]✓[/green] Reading plan created")
-        
-        # Emit progress: Architect completed
+
         if progress_callback:
             progress_callback.architect_completed(result.domain)
-            if hasattr(progress_callback, 'report_architect_plan'):
-                 progress_callback.report_architect_plan(result.reading_plan)
-        
-        console.print("\n[bold]═══ Phase 2: Specialist Analysis (Parallel) ═══[/bold]")
-        
-        # Emit progress: Specialists started
-        if progress_callback:
-            progress_callback.specialist_started("context_hunter")
-            progress_callback.specialist_started("math_specialist")
-            progress_callback.specialist_started("data_auditor")
-        
-        # Step 2-3: Run specialists and editors in parallel using single executor
-        # Create single ThreadPoolExecutor for all parallel work
+            if hasattr(progress_callback, "report_architect_plan"):
+                progress_callback.report_architect_plan(result.reading_plan)
+
+        iteration_state = IterationState(max_rounds=max_iterations)
+        all_reports: Dict[str, str] = {}
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Step 2: Run specialists in parallel
-            specialist_reports = self._run_specialists_parallel(
-                content=content,
-                reading_plan=result.reading_plan,
-                progress_callback=progress_callback,
-                executor=executor,
-                language=language
-            )
-            
-            result.context_report = specialist_reports.get("context_hunter", "")
-            result.math_report = specialist_reports.get("math_specialist", "")
-            result.experiment_report = specialist_reports.get("data_auditor", "")
-            
-            # Extract P0 features: Variable Tracking and Reproduction Checklist
+            # max_rounds=0: run once (0 < 1). max_rounds=2: run twice (0,1 < 2).
+            while iteration_state.current_round < max(iteration_state.max_rounds, 1):
+                round_label = f" (Round {iteration_state.current_round + 1})" if iteration_state.max_rounds > 0 else ""
+                console.print(f"\n[bold]═══ Phase 2: Specialist Analysis{round_label} ═══[/bold]")
+
+                if progress_callback:
+                    progress_callback.specialist_started("context_hunter")
+                    progress_callback.specialist_started("math_specialist")
+                    progress_callback.specialist_started("data_auditor")
+
+                specialist_outputs = self._run_specialists_with_requests(
+                    content=content,
+                    reading_plan=result.reading_plan,
+                    previous_reports=all_reports,
+                    iteration_state=iteration_state,
+                    progress_callback=progress_callback,
+                    executor=executor,
+                    language=language,
+                )
+
+                # Collect reports and tentative gaps for Gap Agent review
+                tentative_gaps_by_agent: Dict[str, List[TentativeGap]] = {}
+                for out in specialist_outputs:
+                    all_reports[out.agent_name] = out.report
+                    tentative_gaps_by_agent[out.agent_name] = out.tentative_gaps
+
+                result.context_report = all_reports.get("context_hunter", "")
+                result.math_report = all_reports.get("math_specialist", "")
+                result.experiment_report = all_reports.get("data_auditor", "")
+
+                if progress_callback:
+                    progress_callback.specialist_completed("context_hunter")
+                    progress_callback.specialist_completed("math_specialist")
+                    progress_callback.specialist_completed("data_auditor")
+
+                # Phase 2.5: Gap Agent review only when iterative analysis is enabled
+                if max_iterations > 0:
+                    gap_result = self._run_gap_agent(
+                        title=title or result.title,
+                        domain=result.domain,
+                        reports=all_reports,
+                        tentative_gaps=tentative_gaps_by_agent,
+                        reading_plan=result.reading_plan,
+                    )
+                    iteration_state.pending_requests = gap_result.unified_requests
+                    if not gap_result.needs_iteration or not iteration_state.can_continue():
+                        break
+                else:
+                    # No iteration requested; skip Gap Agent (avoids unnecessary LLM call)
+                    break
+
+                console.print("\n[bold]═══ Resolving information requests ═══[/bold]")
+                self._process_requests(
+                    requests=list(iteration_state.pending_requests),
+                    content=content,
+                    all_reports=all_reports,
+                    iteration_state=iteration_state,
+                    progress_callback=progress_callback,
+                )
+                iteration_state.current_round += 1
+
             result.variable_tracking = self._extract_variable_tracking(result.math_report)
             result.reproduction_checklist = self._extract_reproduction_checklist(result.experiment_report)
-            
-            # Emit progress: Specialists completed
-            if progress_callback:
-                progress_callback.specialist_completed("context_hunter")
-                progress_callback.specialist_completed("math_specialist")
-                progress_callback.specialist_completed("data_auditor")
-            
+
             console.print("\n[bold]═══ Phase 3: Editor Assembly (Single Language) ═══[/bold]")
-            
-            # Emit progress: Editors started
             if progress_callback:
-                if language == 'en':
+                if language == "en":
                     progress_callback.editor_started("english")
                 else:
                     progress_callback.editor_started("chinese")
-            
-            # Step 3: Editors assemble final reports in parallel
-            # Load figure index for detailed figure information
-            available_figures = self._format_figure_list_from_index(figure_index_path) if figure_index_path else self._format_figure_list(images)
-            
-            # Run English and Chinese editors in parallel (reuse same executor)
+
+            available_figures = (
+                self._format_figure_list_from_index(figure_index_path)
+                if figure_index_path
+                else self._format_figure_list(images)
+            )
             editor_reports = self._run_editors_parallel(
                 context_report=result.context_report,
                 math_report=result.math_report,
@@ -272,30 +330,27 @@ class HierarchicalOrchestrator:
                 title=title,
                 progress_callback=progress_callback,
                 executor=executor,
-                language=language
+                language=language,
             )
-        
-        if language == 'en':
+
+        if language == "en":
             result.final_report = editor_reports.get("english", "")
-            # Extract figure suggestions from English report
             result.figure_suggestions = self._extract_figure_suggestions(result.final_report)
         else:
             result.final_report_chinese = editor_reports.get("chinese", "")
-            # Extract figure suggestions from Chinese report
             result.figure_suggestions = self._extract_figure_suggestions(result.final_report_chinese)
-        
-        # Emit progress: Editors completed
+
         if progress_callback:
-            if language == 'en':
+            if language == "en":
                 progress_callback.editor_completed("english", len(result.final_report))
             else:
                 progress_callback.editor_completed("chinese", len(result.final_report_chinese))
-        
-        if language == 'en':
+
+        if language == "en":
             console.print(f"[green]✓[/green] English report assembled ({len(result.final_report):,} chars)")
         else:
             console.print(f"[green]✓[/green] Chinese report assembled ({len(result.final_report_chinese):,} chars)")
-        
+
         return result
     
     def _call_llm(
@@ -470,19 +525,450 @@ class HierarchicalOrchestrator:
         return plan
     
     def _fix_json_string(self, json_str: str) -> str:
-        """Fix common JSON issues from LLM output."""
+        """Fix common JSON issues from LLM output (trailing commas, unescaped strings, etc.)."""
         # Remove trailing commas before } or ]
         json_str = re.sub(r',\s*([\}\]])', r'\1', json_str)
-        
+
         # Replace single quotes with double quotes (careful with apostrophes)
-        # Only replace single quotes that are likely JSON delimiters
         json_str = re.sub(r"(\s)'([^']+)'(\s*[,:}\]])", r'\1"\2"\3', json_str)
-        
+
         # Fix unquoted keys
         json_str = re.sub(r'(\{|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', json_str)
-        
-        return json_str
+
+        # Fix unescaped newlines/tabs/quotes inside double-quoted strings
+        # Walk through and escape literals that break JSON when inside "..."
+        result: List[str] = []
+        i = 0
+        in_string = False
+        escape_next = False
+        while i < len(json_str):
+            c = json_str[i]
+            if escape_next:
+                result.append(c)
+                escape_next = False
+                i += 1
+                continue
+            if c == '\\' and in_string:
+                result.append(c)
+                escape_next = True
+                i += 1
+                continue
+            if c == '"' and not escape_next:
+                in_string = not in_string
+                result.append(c)
+                i += 1
+                continue
+            if in_string:
+                if c == '\n':
+                    result.append('\\n')
+                elif c == '\r':
+                    result.append('\\r')
+                elif c == '\t':
+                    result.append('\\t')
+                else:
+                    result.append(c)
+                i += 1
+                continue
+            result.append(c)
+            i += 1
+
+        return "".join(result)
     
+    def _parse_specialist_output(
+        self,
+        agent_name: str,
+        raw_response: str,
+    ) -> SpecialistOutput:
+        """Parse specialist output: extract clean report and tentative gap hints.
+
+        Newer prompts ask specialists to optionally emit a <TENTATIVE_GAPS> block
+        instead of formal JSON requests. We parse that block into TentativeGap
+        instances and strip it from the final report.
+        """
+        text = raw_response or ""
+
+        # Extract <TENTATIVE_GAPS> block if present
+        gaps: List[TentativeGap] = []
+        match = re.search(
+            r"<TENTATIVE_GAPS>(.*?)</TENTATIVE_GAPS>",
+            text,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if match:
+            block = match.group(1)
+            for line in block.splitlines():
+                line = line.strip()
+                if not line or not line.startswith("-"):
+                    continue
+                desc = line.lstrip("-").strip()
+                if not desc:
+                    continue
+                severity = "medium"
+                sev_match = re.match(r"\[(low|medium|high)\]\s*(.*)", desc, re.IGNORECASE)
+                if sev_match:
+                    severity = sev_match.group(1).lower()
+                    desc = sev_match.group(2).strip()
+                gaps.append(TentativeGap(description=desc, severity=severity))
+            # Remove the tentative gaps block from the report text
+            text = text[: match.start()] + text[match.end() :]
+
+        clean_report = text.strip()
+
+        return SpecialistOutput(
+            agent_name=agent_name,
+            report=clean_report,
+            tentative_gaps=gaps,
+        )
+
+    def _format_tentative_gaps(
+        self,
+        tentative_gaps_by_agent: Dict[str, List[TentativeGap]],
+    ) -> str:
+        """Format tentative gaps into a markdown block for the Gap Agent."""
+        if not tentative_gaps_by_agent:
+            return "(no explicit tentative gaps were provided by specialists)"
+
+        lines: List[str] = []
+        for agent, gaps in tentative_gaps_by_agent.items():
+            if not gaps:
+                continue
+            lines.append(f"### {agent}")
+            for gap in gaps:
+                sev = gap.severity.upper()
+                lines.append(f"- [{sev}] {gap.description}")
+            lines.append("")
+        return "\n".join(lines) if lines else "(no explicit tentative gaps were provided by specialists)"
+
+    def _run_gap_agent(
+        self,
+        title: str,
+        domain: str,
+        reports: Dict[str, str],
+        tentative_gaps: Dict[str, List[TentativeGap]],
+        reading_plan: ReadingPlan,
+    ) -> GapAnalysisResult:
+        """Invoke the Gap Agent to review specialist reports and unify requests."""
+        # If nothing to review, short-circuit
+        if not any(reports.values()):
+            return GapAnalysisResult()
+
+        prompt = GAP_AGENT_PROMPT.format(
+            title=title or (reading_plan.paper_summary or "Untitled Paper"),
+            domain=domain or (reading_plan.domain or "Unknown"),
+            context_report=reports.get("context_hunter", ""),
+            math_report=reports.get("math_specialist", ""),
+            experiment_report=reports.get("data_auditor", ""),
+            tentative_gaps=self._format_tentative_gaps(tentative_gaps),
+        )
+
+        if self.progress_callback and hasattr(self.progress_callback, "gap_agent_started"):
+            self.progress_callback.gap_agent_started()
+
+        if self.verbose:
+            console.print("\n[dim]─── Gap Agent Prompt (truncated) ───[/dim]")
+            console.print(prompt[:800] + "...")
+
+        raw = self._call_llm(
+            GAP_AGENT_SYSTEM,
+            prompt,
+            temperature=0.2,
+            agent_name="GapAgent",
+            agent_key="gap_agent",
+            phase="review",
+            stream=False,
+        )
+        raw = self._clean_llm_response(raw)
+        result = self._parse_gap_agent_output(raw)
+
+        if self.progress_callback and hasattr(self.progress_callback, "gap_agent_completed"):
+            self.progress_callback.gap_agent_completed(result)
+
+        return result
+
+    def _parse_gap_agent_output(self, response: str) -> GapAnalysisResult:
+        """Parse JSON output from Gap Agent into GapAnalysisResult."""
+        try:
+            # Extract JSON block (in case there is extra text)
+            match = re.search(r"\{[\s\S]*\}", response)
+            if not match:
+                raise ValueError("No JSON object found in Gap Agent response")
+            json_str = match.group(0)
+            try:
+                data = json.loads(self._fix_json_string(json_str))
+            except json.JSONDecodeError:
+                # Fallback: json-repair handles unescaped quotes, trailing commas, etc.
+                try:
+                    import json_repair
+                    data = json_repair.loads(json_str)
+                except Exception:
+                    raise
+        except Exception as e:
+            console.print(f"[yellow]⚠ Gap Agent output parse failed: {e}[/yellow]")
+            return GapAnalysisResult(
+                assessments={},
+                unified_requests=[],
+                overall_confidence=1.0,
+                needs_iteration=False,
+                iteration_recommendation="Gap Agent output could not be parsed; skipping iteration.",
+            )
+
+        # Parse assessments
+        assessments: Dict[str, ExpertAssessment] = {}
+        for agent_name, a in (data.get("assessments") or {}).items():
+            try:
+                assessments[agent_name] = ExpertAssessment(
+                    agent_name=agent_name,
+                    completeness=float(a.get("completeness", 1.0)),
+                    coherence=float(a.get("coherence", 1.0)),
+                    gaps_found=list(a.get("gaps_found", [])),
+                    cross_ref_needs=list(a.get("cross_ref_needs", [])),
+                )
+            except Exception:
+                continue
+
+        # Parse unified requests
+        unified_requests: List[InformationRequest] = []
+        for idx, r in enumerate(data.get("unified_requests") or []):
+            if not isinstance(r, dict):
+                continue
+            req_type = r.get("request_type", "clarification")
+            if req_type not in ("section_needed", "clarification", "cross_reference", "figure_detail"):
+                req_type = "clarification"
+            requester = r.get("requester") or r.get("requester_agent") or "unknown"
+            content = r.get("content", "")
+            target = r.get("target")
+            priority = r.get("priority", "medium") or "medium"
+            unified_requests.append(
+                InformationRequest(
+                    request_id=f"gap_{idx}",
+                    requester=requester,
+                    request_type=req_type,
+                    content=content,
+                    target=target,
+                    priority=priority,
+                    context={},
+                )
+            )
+
+        overall_confidence = float(data.get("overall_confidence", 1.0))
+        needs_iteration = bool(data.get("needs_iteration", False))
+        iteration_recommendation = str(data.get("iteration_recommendation", "") or "")
+
+        return GapAnalysisResult(
+            assessments=assessments,
+            unified_requests=unified_requests,
+            overall_confidence=overall_confidence,
+            needs_iteration=needs_iteration,
+            iteration_recommendation=iteration_recommendation,
+        )
+
+    def _run_specialists_with_requests(
+        self,
+        content: str,
+        reading_plan: ReadingPlan,
+        previous_reports: Dict[str, str],
+        iteration_state: IterationState,
+        progress_callback: Optional[Any] = None,
+        executor: Optional[ThreadPoolExecutor] = None,
+        language: str = "en",
+    ) -> List[SpecialistOutput]:
+        """Run all three specialists; optionally inject iteration context. Returns parsed outputs."""
+        from .hierarchical_prompts import LANG_INSTRUCTION_EN, LANG_INSTRUCTION_ZH
+
+        lang_instruction = LANG_INSTRUCTION_ZH if language == "zh" else LANG_INSTRUCTION_EN
+        iteration_context = ""
+        if iteration_state.current_round > 0 and iteration_state.resolved_requests:
+            iteration_context = self._build_iteration_context(
+                iteration_state.resolved_requests,
+                previous_reports,
+            )
+
+        specialists = [
+            (
+                "context_hunter",
+                CONTEXT_HUNTER_SYSTEM,
+                CONTEXT_HUNTER_PROMPT + lang_instruction,
+                reading_plan.context_hunter_task,
+                self._extract_sections(
+                    content,
+                    reading_plan.context_hunter_task.get("sections", ["Introduction", "Related Work"]),
+                ),
+            ),
+            (
+                "math_specialist",
+                MATH_SPECIALIST_SYSTEM,
+                MATH_SPECIALIST_PROMPT + lang_instruction,
+                reading_plan.math_specialist_task,
+                self._extract_sections(
+                    content,
+                    reading_plan.math_specialist_task.get("sections", ["Method", "Approach"]),
+                ),
+            ),
+            (
+                "data_auditor",
+                DATA_AUDITOR_SYSTEM,
+                DATA_AUDITOR_PROMPT + lang_instruction,
+                reading_plan.data_auditor_task,
+                self._extract_sections(
+                    content,
+                    reading_plan.data_auditor_task.get("sections", ["Experiments", "Results"]),
+                ),
+            ),
+        ]
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            console=console,
+        ) as progress:
+            task_ids = {}
+            for name, _, _, _, _ in specialists:
+                task_ids[name] = progress.add_task(f"[cyan]{name}[/cyan]", total=100)
+
+            executor_context = executor if executor else ThreadPoolExecutor(max_workers=self.max_workers)
+            should_close_executor = executor is None
+
+            try:
+                if should_close_executor:
+                    executor_context = executor_context.__enter__()
+
+                futures = {}
+                for name, system, prompt_template, task_assignment, section_content in specialists:
+                    full_content = section_content
+                    if iteration_context:
+                        full_content = section_content + "\n\n" + iteration_context
+                    if self.verbose:
+                        console.print(f"[dim]  {name} content length: {len(full_content)}[/dim]")
+                    prompt = prompt_template.format(
+                        task_assignment=json.dumps(task_assignment, indent=2),
+                        content=full_content,
+                    )
+                    future = executor_context.submit(
+                        self._call_llm,
+                        system,
+                        prompt,
+                        None,
+                        None,
+                        name,
+                        name,
+                        "analysis",
+                        True,
+                    )
+                    futures[future] = name
+
+                outputs: List[SpecialistOutput] = []
+                raw_by_name: Dict[str, str] = {}
+                for future in as_completed(futures):
+                    name = futures[future]
+                    try:
+                        raw = future.result()
+                        raw_by_name[name] = self._clean_llm_response(raw)
+                        progress.update(task_ids[name], completed=100)
+                        console.print(f"[green]✓[/green] {name} completed")
+                    except Exception as e:
+                        raw_by_name[name] = f"Error: {e}"
+                        console.print(f"[red]✗[/red] {name} failed: {e}")
+
+                for name in ("context_hunter", "math_specialist", "data_auditor"):
+                    raw = raw_by_name.get(name, "")
+                    if raw.startswith("Error:"):
+                        outputs.append(
+                            SpecialistOutput(agent_name=name, report=raw, confidence=0.0, needs_iteration=False)
+                        )
+                    else:
+                        outputs.append(self._parse_specialist_output(name, raw))
+            finally:
+                if should_close_executor:
+                    executor_context.__exit__(None, None, None)
+
+        return outputs
+
+    def _build_iteration_context(
+        self,
+        resolved_requests: List[InformationRequest],
+        previous_reports: Dict[str, str],
+    ) -> str:
+        """Build context string from resolved requests for the next specialist round."""
+        parts = ["## Additional Information from Previous Iteration\n"]
+        for req in resolved_requests:
+            parts.append(f"### Request from {req.requester}")
+            parts.append(f"**Type**: {req.request_type}")
+            parts.append(f"**Question**: {req.content}")
+            resolved = (req.resolved_content or "").strip()
+            if len(resolved) > 2000:
+                resolved = resolved[:2000] + "..."
+            parts.append(f"**Resolved**: {resolved}")
+            parts.append("")
+        return "\n".join(parts)
+
+    def _process_requests(
+        self,
+        requests: List[InformationRequest],
+        content: str,
+        all_reports: Dict[str, str],
+        iteration_state: IterationState,
+        progress_callback: Optional[Any] = None,
+    ) -> None:
+        """Resolve pending information requests and move them to resolved_requests."""
+        for req in requests:
+            # Attach round for WebSocket/frontend display (Payload.round + 1 = "Round N")
+            req._round = iteration_state.current_round
+            if progress_callback and hasattr(progress_callback, "request_processing"):
+                progress_callback.request_processing(req)
+
+            if req.request_type == "section_needed":
+                req.resolved_content = self._extract_section_for_request(content, req)
+            elif req.request_type == "cross_reference":
+                if req.target and req.target in all_reports:
+                    req.resolved_content = all_reports[req.target]
+                else:
+                    req.resolved_content = "(Target report not available)"
+            elif req.request_type == "clarification":
+                req.resolved_content = self._clarify_content(req.content, req.context)
+            elif req.request_type == "figure_detail":
+                req.resolved_content = self._extract_section_for_request(content, req)
+
+            if not req.resolved_content:
+                req.resolved_content = "(No additional content found)"
+
+            iteration_state.resolved_requests.append(req)
+            if req in iteration_state.pending_requests:
+                iteration_state.pending_requests.remove(req)
+
+            if progress_callback and hasattr(progress_callback, "request_resolved"):
+                progress_callback.request_resolved(req)
+
+    def _extract_section_for_request(self, content: str, request: InformationRequest) -> str:
+        """Extract section content based on request description (e.g. Appendix A)."""
+        text = (request.content or "").lower()
+        candidates = []
+        if "appendix" in text:
+            candidates.extend(["Appendix", "Appendix A", "Appendix B", "Supplementary"])
+        if "supplementary" in text or "supplement" in text:
+            candidates.extend(["Supplementary", "Supplementary Material", "Appendix"])
+        if "proof" in text or "theorem" in text:
+            candidates.extend(["Proof", "Proof of Theorem", "Appendix"])
+        if not candidates:
+            candidates = ["Appendix", "Supplementary", "Appendix A"]
+        extracted = self._extract_sections(content, candidates)
+        return extracted or content[:8000]
+
+    def _clarify_content(self, question: str, context: Dict[str, str]) -> str:
+        """Use LLM to clarify ambiguous content based on question and context."""
+        ctx_str = "\n".join(f"{k}: {v}" for k, v in context.items()) if context else "(no context)"
+        user = f"""The following question was raised during analysis:\n{question}\n\nContext:\n{ctx_str}\n\nProvide a brief clarification (2-4 sentences) that could resolve this. If the context is insufficient, say so."""
+        try:
+            return self._call_llm(
+                "You are a concise academic assistant. Provide brief clarifications.",
+                user,
+                temperature=0.2,
+                agent_name="Clarifier",
+                phase="analysis",
+            )
+        except Exception:
+            return "(Clarification unavailable)"
+
     def _run_specialists_parallel(
         self,
         content: str,
