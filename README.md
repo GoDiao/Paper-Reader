@@ -258,6 +258,34 @@ paper_reader/
 
 ## 🚀 Changelog
 
+### v1.7.0 - Iterative Analysis & Gap Agent
+
+**🎉 Major Announcement: Starting from v1.7.0, Paper Reader officially supports one-click export to Notion!**
+
+- **🔄 Iterative Analysis**:
+  - Specialists can proactively raise information gaps (`<TENTATIVE_GAPS>`), triggering automatic refinement cycles.
+  - Configurable iteration rounds (`max_iterations`), with each round resolving requests from the previous iteration.
+  - New frontend iteration panel displaying request type, content, and resolution status per round.
+
+- **🧩 Gap Agent (Gap Analysis Specialist)**:
+  - New independent Gap Agent that reviews all three specialist reports to identify cross-domain information gaps.
+  - Generates global confidence score (0.0–1.0) with natural language explanation for iteration recommendations.
+  - Outputs standardized `unified_requests` list, auto-classified as `section_needed`, `cross_reference`, `clarification`, or `figure_detail`.
+
+- **📊 Frontend Enhancements**:
+  - **Gap Agent Panel**: Displays per-specialist assessments (completeness, coherence, gaps found), global confidence, iteration recommendation, and request list.
+  - **Round Tracking Fix**: WebSocket events now carry correct round numbers, displaying "Round N" accurately.
+  - **Config Display Fix**: `max_iterations=0` no longer incorrectly shows as "2".
+
+- **🛠️ Backend Optimizations**:
+  - **Round Logic Fix**: `max_iterations=N` now truly executes `N+1` specialist rounds (initial + N refinements).
+  - **JSON Parsing Enhancement**: Added `json-repair` fallback to handle unescaped quotes, newlines, and other malformed JSON from LLMs.
+  - **Cache Optimization**: Empty parse results (0 characters) are no longer cached to prevent pollution.
+  - **MinerU Compatibility**: Handles Magika returning `unknown` for PDF identification, improving success rate for complex PDFs.
+
+- **📦 New Dependency**:
+  - `json-repair>=0.55.0`: Automatically repairs malformed JSON from LLM outputs.
+
 ### tonotion (tag) - Notion Export (Side Feature)
 
 - **📝 Native Notion Export**: One-click export to Notion pages with full support for:

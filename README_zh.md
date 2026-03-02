@@ -258,6 +258,34 @@ paper_reader/
 
 ## 🚀 更新日志
 
+### v1.7.0 - 迭代分析与 Gap Agent
+
+**🎉 重要公告：从 v1.7.0 开始，Paper Reader 正式支持一键导出到 Notion！**
+
+- **🔄 迭代分析 (Iterative Analysis)**：
+  - 专家可主动提出信息缺口（`<TENTATIVE_GAPS>`），系统自动进入迭代 refinement 流程。
+  - 支持配置迭代轮数（`max_iterations`），每轮解决上一轮遗留的信息请求。
+  - 前端新增迭代面板，实时展示每轮请求类型、内容与解决状态。
+
+- **🧩 Gap Agent（差距分析专家）**：
+  - 新增独立 Gap Agent，统一审查三位专家的报告，识别跨领域信息缺口。
+  - 生成全局置信度评分（0.0–1.0），并给出是否建议迭代的自然语言解释。
+  - 输出标准化的信息请求列表（`unified_requests`），自动分类为 `section_needed`、`cross_reference`、`clarification`、`figure_detail`。
+
+- **📊 前端增强**：
+  - **Gap Agent 面板**：展示各专家评估（完整性、连贯性、发现缺口）、全局置信度、迭代建议与请求列表。
+  - **轮次追踪修复**：WebSocket 事件携带正确轮次，前端显示 "Round N" 与实际迭代一致。
+  - **配置显示修复**：`max_iterations=0` 时不再错误显示为 "2"。
+
+- **🛠️ 后端优化**：
+  - **轮次逻辑修正**：`max_iterations=N` 现在真正执行 `N+1` 轮专家分析（初始 + N 次 refinement）。
+  - **JSON 解析增强**：引入 `json-repair` 兜底，修复 LLM 输出的未转义引号、换行符等畸形 JSON。
+  - **缓存优化**：空解析结果（0 字符）不再写入缓存，避免无效缓存污染。
+  - **MinerU 兼容性**：处理 Magika 返回 `unknown` 的 PDF 识别，提升复杂 PDF 的解析成功率。
+
+- **📦 新增依赖**：
+  - `json-repair>=0.55.0`：自动修复 LLM 生成的畸形 JSON。
+
 ### tonotion（tag）- Notion 导出（支线功能）
 
 - **📝 原生 Notion 导出**: 一键导出为 Notion 页面，深度优化内容呈现：
