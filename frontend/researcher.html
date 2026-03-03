@@ -1,0 +1,2124 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Research - AI 研究助手</title>
+    <meta name="description" content="使用 AI 进行深度网络研究，获取全面的研究报吿">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Markdown Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+    
+    <!-- Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    
+    <!-- KaTeX for Math -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    
+    <link rel="stylesheet" href="/static/styles.css?v=10">
+    <style>
+        /* Researcher-specific styles - 修复裁切与布局 */
+        body {
+            overflow-x: auto !important;
+        }
+        .main-container {
+            overflow-x: visible;
+        }
+
+        .researcher-container {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            box-sizing: border-box;
+            overflow: visible;
+        }
+
+        .research-form-panel {
+            max-width: 100%;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            position: static;
+            box-sizing: border-box;
+        }
+
+        .research-result-panel {
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            min-height: 600px;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+
+        .research-result-panel .research-result {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .research-form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .research-form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .research-form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .research-options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .research-history-panel {
+            margin-top: 2rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .research-history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .research-history-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg-surface-hover);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--duration-short);
+            border: 1px solid transparent;
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .research-history-item:hover {
+            background: var(--bg-elevated);
+            border-color: var(--primary);
+            transform: translateX(4px);
+        }
+
+        .research-history-content {
+            flex: 1;
+            min-width: 0;
+            max-width: calc(100% - 3rem);
+        }
+
+        .research-history-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: var(--text-main);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .research-history-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            gap: 1rem;
+        }
+
+        .research-history-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .research-history-action-btn {
+            padding: 0.35rem;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: all var(--duration-short);
+        }
+
+        .research-history-action-btn:hover {
+            color: var(--primary);
+            background: var(--bg-surface-hover);
+        }
+
+        .research-content {
+            font-size: 1rem;
+            line-height: 1.75;
+            color: var(--text-secondary);
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-x: auto;
+            overflow-y: visible;
+            box-sizing: border-box;
+        }
+        /* 防止块级元素溢出裁切 */
+        .research-content p, .research-content div, .research-content li,
+        .research-content h1, .research-content h2, .research-content h3,
+        .research-content h4, .research-content blockquote {
+            max-width: 100%;
+        }
+
+        .research-content p,
+        .research-content li {
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+        .research-content td,
+        .research-content th {
+            overflow-wrap: break-word;
+        }
+
+        .research-content pre,
+        .research-content code {
+            max-width: 100%;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .research-content pre {
+            padding: 1rem;
+            border-radius: var(--radius-md);
+            background: var(--bg-surface-hover);
+        }
+
+        .research-content .katex,
+        .research-content .katex-display {
+            overflow-x: auto;
+            overflow-y: hidden;
+            max-width: 100%;
+        }
+
+        .research-content h1, .research-content h2, .research-content h3 {
+            color: var(--text-main);
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .research-content .table-wrapper {
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            -webkit-overflow-scrolling: touch;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-hover);
+        }
+
+        .research-content table {
+            width: 100%;
+            min-width: 400px;
+            border-collapse: collapse;
+            table-layout: auto;
+            display: table;
+        }
+
+        .research-content thead { display: table-header-group; }
+        .research-content tbody { display: table-row-group; }
+        .research-content tr { display: table-row; }
+        .research-content th,
+        .research-content td {
+            display: table-cell;
+            white-space: normal;
+            word-break: normal;
+        }
+
+        .research-content th {
+            background: var(--bg-surface-hover);
+            text-align: left;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+            border-bottom: 2px solid var(--border-hover);
+        }
+
+        .research-content td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-hover);
+            color: var(--text-secondary);
+        }
+
+        .research-sources {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .research-sources h3 {
+            font-size: 1.125rem;
+            margin-bottom: 1rem;
+            color: var(--text-main);
+        }
+
+        .research-source-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-surface-hover);
+            border-radius: var(--radius-sm);
+            margin-bottom: 0.5rem;
+            transition: all var(--duration-short);
+        }
+
+        .research-source-item:hover {
+            background: var(--bg-elevated);
+            transform: translateX(4px);
+        }
+
+        .source-favicon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .source-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .source-title {
+            font-weight: 500;
+            color: var(--primary-light);
+            text-decoration: none;
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .source-title:hover {
+            text-decoration: underline;
+        }
+
+        .source-url {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .research-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 1200px) {
+            .researcher-container {
+                grid-template-columns: 1fr;
+            }
+
+            .research-form-panel {
+                position: static;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo" id="logoBtn" style="cursor: pointer;">
+                <i class="fas fa-search-plus"></i>
+                <span>Deep Research</span>
+            </div>
+            <nav class="nav-buttons">
+                <a href="/" class="nav-btn" title="Back to Paper Reader">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Paper Reader</span>
+                </a>
+                <button id="themeToggleBtn" class="nav-btn" title="Switch Theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="langToggleBtn" class="nav-btn" title="Switch Language">
+                    <i class="fas fa-globe"></i>
+                    <span id="langLabel">EN</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <div class="researcher-container">
+            <!-- Left Panel: Research Form -->
+            <div class="research-form-panel">
+                <h2 data-i18n="new_research">New Research</h2>
+                
+                <div class="research-form-group">
+                    <label for="researchQuery" data-i18n="research_topic">Research Topic</label>
+                    <textarea id="researchQuery" placeholder="e.g., Latest developments in large language models and their applications" data-i18n-placeholder="research_topic_placeholder"></textarea>
+                </div>
+
+                <div class="research-options-grid">
+                    <div class="research-form-group">
+                        <label for="researchProvider" data-i18n="research_provider">Research Provider</label>
+                        <select id="researchProvider">
+                            <option value="tavily" selected data-i18n="provider_tavily">Tavily (Default)</option>
+                            <option value="valyu" data-i18n="provider_valyu">Valyu (Advanced)</option>
+                        </select>
+                        <p class="setting-hint" data-i18n="provider_hint" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+                            Tavily: Fast, simple pricing | Valyu: Advanced features, multiple modes
+                        </p>
+                    </div>
+                    
+                    <div class="research-form-group">
+                        <label for="researchModel" data-i18n="research_model">Research Mode</label>
+                        <select id="researchModel">
+                            <!-- Options updated dynamically based on provider -->
+                        </select>
+                    </div>
+
+                    <div class="research-form-group">
+                        <label for="citationFormat" data-i18n="citation_format">Citation Format</label>
+                        <select id="citationFormat">
+                            <option value="numbered" data-i18n="citation_numbered">Numbered</option>
+                            <option value="apa" data-i18n="citation_apa">APA</option>
+                            <option value="mla" data-i18n="citation_mla">MLA</option>
+                            <option value="chicago" data-i18n="citation_chicago">Chicago</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="startResearchBtn" class="btn btn-primary btn-large btn-block">
+                    <i class="fas fa-play"></i> <span data-i18n="start_research">Start Research</span>
+                </button>
+
+                <!-- Progress -->
+                <div id="researchProgress" class="deep-research-progress hidden" style="margin-top: 1.5rem;">
+                    <div class="deep-research-status">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span id="researchStatusText" data-i18n="researching">Researching...</span>
+                    </div>
+                    
+                    <!-- Detailed Status Panel -->
+                    <div id="researchStatusPanel" class="research-status-panel hidden" style="margin-top: 1rem; padding: 1rem; background: var(--bg-surface-hover); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                            <i class="fas fa-info-circle" style="color: var(--primary);"></i>
+                            <span style="font-weight: 600; color: var(--text-main);">Research Progress</span>
+                        </div>
+                        
+                        <!-- Status Timeline -->
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                            <div id="statusStep1" class="status-step completed" style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--success);"></div>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">Started</span>
+                            </div>
+                            <div style="width: 40px; height: 2px; background: var(--border-color);" id="statusLine1"></div>
+                            <div id="statusStep2" class="status-step" style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--bg-surface-hover); border: 2px solid var(--border-color);"></div>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">Searching</span>
+                            </div>
+                            <div style="width: 40px; height: 2px; background: var(--border-color);" id="statusLine2"></div>
+                            <div id="statusStep3" class="status-step" style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--bg-surface-hover); border: 2px solid var(--border-color);"></div>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">Analyzing</span>
+                            </div>
+                            <div style="width: 40px; height: 2px; background: var(--border-color);" id="statusLine3"></div>
+                            <div id="statusStep4" class="status-step" style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--bg-surface-hover); border: 2px solid var(--border-color);"></div>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">Writing</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Elapsed Time -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; color: var(--text-secondary);">
+                            <span id="elapsedTime"><i class="fas fa-clock"></i> Elapsed: 0s</span>
+                            <span id="currentStatus" style="color: var(--primary);">Initializing...</span>
+                        </div>
+                        
+                        <!-- Progress Bar -->
+                        <div style="margin-top: 0.75rem; width: 100%; height: 4px; background: var(--bg-surface); border-radius: 2px; overflow: hidden;">
+                            <div id="researchProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History -->
+                <div class="research-history-panel">
+                    <h3 style="display: flex; align-items: center; gap: 0.5rem; justify-content: space-between;">
+                        <span><i class="fas fa-history"></i> <span data-i18n="research_history">Research History</span></span>
+                        <button id="refreshHistoryBtn" title="Refresh" style="padding: 0.25rem 0.5rem; background: transparent; border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-secondary); cursor: pointer; font-size: 0.8125rem;"><i class="fas fa-sync-alt"></i></button>
+                    </h3>
+                    <div id="researchHistoryList" class="research-history-list">
+                        <!-- History items will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Research Result -->
+            <div class="research-result-panel">
+                <div id="researchPlaceholder" class="research-placeholder" style="text-align: center; padding: 4rem 2rem; color: var(--text-muted);">
+                    <i class="fas fa-search" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+                    <p data-i18n="research_placeholder">Start a new research to see results here</p>
+                </div>
+
+                <div id="researchResult" class="research-result hidden">
+                    <h1 id="researchTitle" style="font-size: 1.75rem; margin-bottom: 0.5rem;"></h1>
+                    <div id="researchMeta" style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1.5rem;"></div>
+                    
+                    <div id="researchContent" class="research-content"></div>
+                    
+                    <div id="researchSources" class="research-sources">
+                        <h3 data-i18n="sources">Sources</h3>
+                        <div id="researchSourcesList"></div>
+                    </div>
+
+                    <div class="research-actions">
+                        <button class="export-btn" id="saveResearchBtn" data-i18n-title="save_research">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                        <button class="export-btn" id="exportNotionBtn" data-i18n-title="export_notion">
+                            <i class="fab fa-notion"></i> Export to Notion
+                        </button>
+                        <button class="export-btn" id="copyResearchBtn" data-i18n-title="copy_clipboard">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Chat Section -->
+                <div id="researchChatSection" class="research-chat-section hidden" style="margin-top: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-surface); display: flex; flex-direction: column; height: 500px;">
+                    <div class="chat-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); background: var(--bg-surface-hover); border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+                        <h2 style="font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                            <i class="fas fa-robot"></i>
+                            <span data-i18n="chat_with_research">Chat with AI about Research</span>
+                        </h2>
+                    </div>
+                    <div id="researchChatMessages" class="chat-messages" style="flex: 1; padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="chat-welcome" style="text-align: center; color: var(--text-secondary); margin-top: 2rem;">
+                            <i class="fas fa-robot" style="font-size: 2.5rem; color: var(--primary); opacity: 0.8; margin-bottom: 1rem;"></i>
+                            <p data-i18n="chat_research_welcome">Hello! I have read this research report. What questions do you have?</p>
+                        </div>
+                    </div>
+                    <div class="chat-input-container" style="padding: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.75rem; background: var(--bg-surface); border-radius: 0 0 var(--radius-lg) var(--radius-lg);">
+                        <textarea id="researchChatInput" data-i18n-placeholder="chat_placeholder" placeholder="Type your question about this research..." rows="1" style="flex: 1; resize: none; min-height: 42px; max-height: 120px; padding: 0.6rem 1rem;"></textarea>
+                        <button id="sendResearchChatBtn" class="btn btn-primary" data-i18n-title="send" style="display: flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden">
+        <i class="toast-icon"></i>
+        <span class="toast-message"></span>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p id="loadingText">Loading...</p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // Translations
+        // ============================================
+        const translations = {
+            en: {
+                new_research: 'New Research',
+                research_topic: 'Research Topic',
+                research_topic_placeholder: 'Enter your research question or topic...',
+                research_model: 'Research Model',
+                research_model_auto: 'Auto (Recommended)',
+                research_model_mini: 'Mini (Fast)',
+                research_model_pro: 'Pro (Comprehensive)',
+                citation_format: 'Citation Format',
+                citation_numbered: 'Numbered',
+                citation_apa: 'APA',
+                citation_mla: 'MLA',
+                citation_chicago: 'Chicago',
+                research_provider: 'Research Provider',
+                provider_tavily: 'Tavily (Default)',
+                provider_valyu: 'Valyu (Advanced)',
+                provider_hint: 'Tavily: Fast, simple pricing | Valyu: Advanced features, multiple modes',
+                mode_fast: 'Fast ($0.10)',
+                mode_standard: 'Standard ($0.50)',
+                mode_heavy: 'Heavy ($2.50)',
+                mode_max: 'Max ($15.00)',
+                start_research: 'Start Research',
+                researching: 'Researching...',
+                research_history: 'Research History',
+                research_placeholder: 'Start a new research to see results here',
+                sources: 'Sources',
+                save_research: 'Save Research',
+                export_notion: 'Export to Notion',
+                copy_clipboard: 'Copy to Clipboard',
+                no_history: 'No research history yet',
+                research_saved: 'Research saved successfully!',
+                notion_exported: 'Exported to Notion!',
+                copied: 'Copied to clipboard!',
+                research_failed: 'Research failed',
+                error_insufficient_credits: 'Insufficient credits. Please top up your account.',
+                error_rate_limit: 'Rate limit exceeded. Please try again later.',
+                error_auth: 'API key invalid or missing. Check your configuration.',
+                error_timeout: 'Research timed out. Please try again.'
+            },
+            zh: {
+                new_research: '新研究',
+                research_topic: '研究主题',
+                research_topic_placeholder: '输入您的研究问题或主题...',
+                research_model: '研究模型',
+                research_model_auto: '自动（推荐）',
+                research_model_mini: 'Mini（快速）',
+                research_model_pro: 'Pro（全面）',
+                citation_format: '引用格式',
+                citation_numbered: '编号',
+                citation_apa: 'APA',
+                citation_mla: 'MLA',
+                citation_chicago: 'Chicago',
+                research_provider: '研究提供商',
+                provider_tavily: 'Tavily (默认)',
+                provider_valyu: 'Valyu (高级)',
+                provider_hint: 'Tavily: 快速，简单定价 | Valyu: 高级功能，多种模式',
+                mode_fast: '快速 ($0.10)',
+                mode_standard: '标准 ($0.50)',
+                mode_heavy: '深度 ($2.50)',
+                mode_max: '极致 ($15.00)',
+                start_research: '开始研究',
+                researching: '研究中...',
+                research_history: '研究历史',
+                research_placeholder: '开始新研究以查看结果',
+                sources: '来源',
+                save_research: '保存研究',
+                export_notion: '导出到 Notion',
+                copy_clipboard: '复制到剪贴板',
+                no_history: '暂无研究历史',
+                research_saved: '研究已保存！',
+                notion_exported: '已导出到 Notion！',
+                copied: '已复制到剪贴板！',
+                research_failed: '研究失败',
+                error_insufficient_credits: '余额不足，请充值账户。',
+                error_rate_limit: '请求过于频繁，请稍后再试。',
+                error_auth: 'API 密钥无效或缺失，请检查配置。',
+                error_timeout: '研究超时，请重试。'
+            }
+        };
+
+        const CHAT_PAGE_LIMIT = 50;
+
+        // ============================================
+        // State
+        // ============================================
+        const state = {
+            uiLang: 'en',
+            currentResearch: null,
+            chatPagination: { offset: 0, count: 0 },
+            websocket: null,
+            sessionId: 'researcher_' + Date.now(),
+            statusStage: 0  // 进度阶段状态
+        };
+
+        // ============================================
+        // Elements
+        // ============================================
+        const elements = {};
+
+        function initElements() {
+            elements.researchQuery = document.getElementById('researchQuery');
+            elements.researchProvider = document.getElementById('researchProvider');
+            elements.researchModel = document.getElementById('researchModel');
+            elements.citationFormat = document.getElementById('citationFormat');
+            elements.startResearchBtn = document.getElementById('startResearchBtn');
+            elements.researchProgress = document.getElementById('researchProgress');
+            elements.researchStatusText = document.getElementById('researchStatusText');
+            elements.researchStatusPanel = document.getElementById('researchStatusPanel');
+            elements.elapsedTime = document.getElementById('elapsedTime');
+            elements.currentStatus = document.getElementById('currentStatus');
+            elements.researchProgressBar = document.getElementById('researchProgressBar');
+            elements.researchPlaceholder = document.getElementById('researchPlaceholder');
+            elements.researchResult = document.getElementById('researchResult');
+            elements.researchTitle = document.getElementById('researchTitle');
+            elements.researchMeta = document.getElementById('researchMeta');
+            elements.researchContent = document.getElementById('researchContent');
+            elements.researchSources = document.getElementById('researchSources');
+            elements.researchSourcesList = document.getElementById('researchSourcesList');
+            elements.saveResearchBtn = document.getElementById('saveResearchBtn');
+            elements.exportNotionBtn = document.getElementById('exportNotionBtn');
+            elements.copyResearchBtn = document.getElementById('copyResearchBtn');
+            elements.researchHistoryList = document.getElementById('researchHistoryList');
+            elements.toast = document.getElementById('toast');
+            elements.loadingOverlay = document.getElementById('loadingOverlay');
+        }
+
+        // ============================================
+        // Utilities
+        // ============================================
+        function showToast(message, type = 'info') {
+            const icon = elements.toast.querySelector('.toast-icon');
+            const messageEl = elements.toast.querySelector('.toast-message');
+            
+            icon.className = 'toast-icon fas ' + (type === 'success' ? 'fa-check' : type === 'error' ? 'fa-times' : 'fa-info-circle');
+            messageEl.textContent = message;
+            
+            elements.toast.classList.remove('hidden');
+            setTimeout(() => elements.toast.classList.add('hidden'), 3000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ============================================
+        // Markdown & KaTeX Rendering
+        // ============================================
+        const converter = new showdown.Converter({
+            tables: true,
+            strikethrough: true,
+            tasklists: true,
+            ghCodeBlocks: true,
+            smoothLivePreview: true,
+            simpleLineBreaks: true,
+            // 改善标题解析
+            headerLevelStart: 1,
+            // 保留 HTML 标签
+            parseImgDimensions: true,
+            // 禁用自动链接，避免误解析
+            simplifiedAutoLink: false,
+            // 禁用字面量内联 HTML
+            literalMidWordUnderscores: true,
+            literalMidWordAsterisks: true
+        });
+
+        function preprocessMarkdown(content) {
+            if (!content || typeof content !== 'string') return '';
+            let c = content;
+            c = c.replace(/^#\s*$/gm, '');
+            c = c.replace(/^(#{1,6})([^\s#])/gm, '$1 $2');
+            // API 返回的 "# ## 标题" 或 " # ## 标题" 转为 Markdown ### 标题（先处理 3 级）
+            c = c.replace(/(^|\s)#\s##\s+(.+?)(?=\s|$)/g, '\n\n### $2\n\n');
+            // API 返回的 " # # 标题" 转为 Markdown ## 标题
+            c = c.replace(/\s#\s#\s+(.+?)(?=\s|$)/g, '\n\n## $1\n\n');
+            c = c.replace(/\n{3,}/g, '\n\n');
+            return c;
+        }
+
+        function renderMarkdown(container, content) {
+            const cleanedContent = preprocessMarkdown(content);
+            container.innerHTML = converter.makeHtml(cleanedContent);
+
+            // 表格用 wrapper 包裹，支持横向滚动
+            container.querySelectorAll('table').forEach(table => {
+                if (table.parentElement?.classList?.contains('table-wrapper')) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-wrapper';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+            
+            // Apply syntax highlighting
+            container.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+
+            // Render KaTeX
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(container, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\(', right: '\\)', display: false},
+                        {left: '\\[', right: '\\]', display: true}
+                    ],
+                    throwOnError: false
+                });
+            }
+        }
+
+        // ============================================
+        // WebSocket
+        // ============================================
+        function connectWebSocket() {
+            if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            state.websocket = new WebSocket(`${protocol}//${window.location.host}/ws/${state.sessionId}`);
+
+            state.websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+
+            state.websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            if (data.type === 'progress' && data.phase === 'deep_research') {
+                updateResearchProgress(data);
+            } else if (data.type === 'complete') {
+                // Research completed
+            } else if (data.type === 'error') {
+                const msg = getStructuredErrorMessage({ message: data.error, code: data.code, details: data.details });
+                showToast(msg, 'error');
+                elements.startResearchBtn.disabled = false;
+            }
+        }
+
+        // ============================================
+        // Research Logic
+        // ============================================
+        function startResearch() {
+            const query = elements.researchQuery.value.trim();
+            const provider = elements.researchProvider.value;
+            const model = elements.researchModel.value;
+            const citationFormat = elements.citationFormat.value;
+            
+            console.log('startResearch called:', { query, provider, model, citationFormat });
+
+            if (!query) {
+                showToast(state.uiLang === 'zh' ? '请输入研究主题' : 'Please enter a research topic', 'error');
+                return;
+            }
+
+            // 立即展示右侧结果区域，并清空旧内容，配合流式输出
+            elements.startResearchBtn.disabled = true;
+            elements.researchProgress.classList.remove('hidden');
+            elements.researchPlaceholder.classList.add('hidden');
+            elements.researchResult.classList.remove('hidden');
+            elements.researchStatusText.textContent = translations[state.uiLang].researching;
+
+            elements.researchTitle.textContent = query.substring(0, 100);
+            elements.researchMeta.innerHTML = `
+                <span><i class="fas fa-robot"></i> Model: ${model.toUpperCase()}</span>
+                <span><i class="fas fa-clock"></i> ${new Date().toLocaleString()}</span>
+            `;
+            elements.researchContent.innerHTML = '<p style="color: var(--text-muted);">Waiting for research results...</p>';
+            elements.researchSourcesList.innerHTML = '';
+            
+            console.log('researchTitle set to:', elements.researchTitle.textContent);
+
+            // 使用 SSE 按提供方进行流式研究
+            startStreamingResearch(query, provider, model, citationFormat);
+
+            state.currentResearch = {
+                query,
+                provider,
+                model,
+                citation_format: citationFormat,
+                started_at: Date.now()
+            };
+            
+            console.log('state.currentResearch:', state.currentResearch);
+        }
+        
+        function updateModelOptions(provider) {
+            const modelSelect = document.getElementById('researchModel');
+            const options = provider === 'valyu' ? [
+                { value: 'fast', label: translations[state.uiLang]?.mode_fast || 'Fast ($0.10)' },
+                { value: 'standard', label: translations[state.uiLang]?.mode_standard || 'Standard ($0.50)' },
+                { value: 'heavy', label: translations[state.uiLang]?.mode_heavy || 'Heavy ($2.50)' },
+                { value: 'max', label: translations[state.uiLang]?.mode_max || 'Max ($15.00)' }
+            ] : [
+                { value: 'auto', label: translations[state.uiLang]?.research_model_auto || 'Auto (Recommended)' },
+                { value: 'mini', label: translations[state.uiLang]?.research_model_mini || 'Mini (Fast)' },
+                { value: 'pro', label: translations[state.uiLang]?.research_model_pro || 'Pro (Comprehensive)' }
+            ];
+            
+            modelSelect.innerHTML = options.map(opt => 
+                `<option value="${opt.value}">${opt.label}</option>`
+            ).join('');
+        }
+        
+        // Listen for provider changes
+        document.getElementById('researchProvider').addEventListener('change', (e) => {
+            updateModelOptions(e.target.value);
+        });
+
+        function startStreamingResearch(query, provider, model, citationFormat) {
+            const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+            const streamUrl = `${protocol}//${window.location.host}/api/deep-research/stream?query=${encodeURIComponent(query)}&provider=${provider}&model=${model}&citation_format=${citationFormat}`;
+            
+            console.log('Starting SSE stream:', streamUrl);
+            
+            const eventSource = new EventSource(streamUrl);
+            let accumulatedContent = '';
+            let sources = [];
+            let startTime = Date.now();
+            let elapsedTime = 0;
+            let lastEventTime = Date.now();
+            state.statusStage = 0;  // 重置进度阶段
+            
+            // 监控连接状态
+            const connectionMonitor = setInterval(() => {
+                const timeSinceLastEvent = Date.now() - lastEventTime;
+                console.log('EventSource readyState:', eventSource.readyState, 'Time since last event:', timeSinceLastEvent / 1000, 's');
+                if (timeSinceLastEvent > 30000) {
+                    console.warn('No SSE event for 30 seconds, connection may be stale');
+                }
+            }, 10000);
+            
+            // Show status panel
+            elements.researchStatusPanel.classList.remove('hidden');
+            
+            // Update elapsed time every second
+            const timerInterval = setInterval(() => {
+                elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+                if (elements.elapsedTime) {
+                    elements.elapsedTime.innerHTML = `<i class="fas fa-clock"></i> Elapsed: ${elapsedTime}s`;
+                }
+            }, 1000);
+
+            eventSource.onopen = () => {
+                console.log('SSE connection opened');
+                lastEventTime = Date.now();
+                updateStatus('started', 'Starting research...');
+            };
+
+            eventSource.addEventListener('started', (event) => {
+                const data = JSON.parse(event.data);
+                console.log('Research started:', data);
+                updateStatus('started', 'Research initialized');
+                updateProgress(5);
+            });
+
+            eventSource.addEventListener('progress', (event) => {
+                lastEventTime = Date.now();
+                const data = JSON.parse(event.data);
+                console.log('SSE progress event:', data);
+                
+                // 使用 Valyu 返回的真实进度（如果有）
+                if (data.progress && data.progress.current_step !== undefined) {
+                    const current = data.progress.current_step;
+                    const total = data.progress.total_steps || 1;
+                    const percent = Math.round((current / total) * 100);
+                    updateProgress(Math.min(90, percent));
+                    updateStatus('in_progress', data.message || `Step ${current}/${total}`);
+                    console.log(`Valyu real progress: ${current}/${total} (${percent}%)`);
+                } else {
+                    // 回退到基于时间的估算
+                    if (elapsedTime < 10) {
+                        updateStatus('in_progress', 'Searching and crawling web pages...');
+                        updateProgressStage(1);
+                    } else if (elapsedTime < 30) {
+                        updateStatus('in_progress', 'Analyzing content and extracting information...');
+                        updateProgressStage(2);
+                    } else if (elapsedTime < 60) {
+                        updateStatus('in_progress', 'Synthesizing research and generating report...');
+                        updateProgressStage(3);
+                    } else {
+                        updateStatus('in_progress', `Research in progress (${elapsedTime}s)...`);
+                        updateProgressStage(3);
+                    }
+                    const progress = Math.min(90, 10 + (elapsedTime / 60) * 80);
+                    updateProgress(progress);
+                }
+                
+                // Stream content progressively
+                if (data.content) {
+                    accumulatedContent += data.content;
+                    elements.researchContent.innerHTML = converter.makeHtml(preprocessMarkdown(accumulatedContent));
+                    
+                    // Apply syntax highlighting and KaTeX on each update
+                    elements.researchContent.querySelectorAll('pre code').forEach((block) => {
+                        hljs.highlightElement(block);
+                    });
+                    if (typeof renderMathInElement !== 'undefined') {
+                        renderMathInElement(elements.researchContent, {
+                            delimiters: [
+                                {left: '$$', right: '$$', display: true},
+                                {left: '$', right: '$', display: false}
+                            ],
+                            throwOnError: false
+                        });
+                    }
+                    
+                    // Scroll to bottom of content
+                    elements.researchContent.scrollTop = elements.researchContent.scrollHeight;
+                }
+                
+                if (data.sources) {
+                    sources = data.sources;
+                }
+            });
+
+            eventSource.addEventListener('completed', (event) => {
+                lastEventTime = Date.now();
+                clearInterval(connectionMonitor);
+                console.log('SSE completed event received:', event);
+                const data = JSON.parse(event.data);
+                console.log('Research completed data:', data);
+                console.log('Content length:', data.content ? data.content.length : 0);
+                console.log('Sources count:', data.sources ? data.sources.length : 0);
+                
+                clearInterval(timerInterval);
+                eventSource.close();
+                
+                // 优先使用 completed 事件中的完整 content/sources，避免流式未收到时空白
+                const finalContent = (data.content && String(data.content).length > 0) ? data.content : accumulatedContent;
+                const finalSources = (data.sources && Array.isArray(data.sources) && data.sources.length > 0) ? data.sources : sources;
+                
+                console.log('finalContent length:', finalContent ? finalContent.length : 0);
+                console.log('finalSources count:', finalSources ? finalSources.length : 0);
+                
+                // Update UI to completed state
+                updateStatus('completed', `Research completed in ${elapsedTime}s!`);
+                updateProgressStage(4);
+                updateProgress(100);
+                
+                setTimeout(() => {
+                    elements.startResearchBtn.disabled = false;
+                    elements.researchProgress.classList.add('hidden');
+                    elements.researchPlaceholder.classList.add('hidden');
+                    elements.researchResult.classList.remove('hidden');
+                    
+                    // 用最终内容与来源刷新右侧面板（防止流式未收到导致空白）
+                    if (finalContent) {
+                        renderMarkdown(elements.researchContent, finalContent);
+                    }
+                    if (finalSources && finalSources.length > 0) {
+                        elements.researchSourcesList.innerHTML = finalSources.map((s, index) => {
+                            const url = s.url || '#';
+                            const title = (s.title || url).substring(0, 80);
+                            const favicon = s.favicon ?
+                                `<img src="${escapeHtml(s.favicon)}" alt="" class="source-favicon" onerror="this.style.display='none'">` :
+                                '<i class="fas fa-link source-favicon"></i>';
+                            const citationNum = index + 1;
+                            return `
+                                <div class="research-source-item" id="reference-${citationNum}" style="scroll-margin-top: 4rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--primary); color: white; border-radius: 50%; font-size: 0.8125rem; font-weight: 600; flex-shrink: 0;">${citationNum}</span>
+                                        ${favicon}
+                                    </div>
+                                    <div class="source-info">
+                                        <a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="source-title">${escapeHtml(title)}</a>
+                                        <span class="source-url">${escapeHtml(url)}</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        elements.researchSourcesList.innerHTML = '<p style="color: var(--text-muted);">No sources</p>';
+                    }
+                    
+                    // 渲染完内容和 sources 后，再绑定引用跳转
+                    if (finalContent) {
+                        makeCitationsClickable(elements.researchContent);
+                    }
+                    
+                    // Store completed research
+                    state.currentResearch.content = finalContent;
+                    state.currentResearch.sources = finalSources;
+                    state.currentResearch.completed_at = Date.now();
+                    
+                    // Show chat section
+                    const chatSection = document.getElementById('researchChatSection');
+                    if (chatSection) {
+                        chatSection.classList.remove('hidden');
+                        if (state.currentResearch?.id) {
+                            loadChatHistory(state.currentResearch.id);
+                        }
+                    }
+                    
+                    showToast('Research completed!', 'success');
+                }, 1000);
+            });
+
+            eventSource.addEventListener('error', (event) => {
+                if (event.data) {
+                    try {
+                        const errData = JSON.parse(event.data);
+                        const msg = getStructuredErrorMessage(errData);
+                        clearInterval(connectionMonitor);
+                        clearInterval(timerInterval);
+                        eventSource.close();
+                        updateStatus('error', msg);
+                        elements.researchProgressBar.style.background = 'var(--error)';
+                        setTimeout(() => {
+                            elements.startResearchBtn.disabled = false;
+                            elements.researchProgress.classList.add('hidden');
+                            showToast(msg, 'error');
+                        }, 2000);
+                        return;
+                    } catch (e) { console.warn('SSE error parse failed:', e); }
+                }
+            });
+            eventSource.onerror = (error) => {
+                console.error('SSE error:', error);
+                console.error('EventSource readyState:', eventSource.readyState);
+                clearInterval(connectionMonitor);
+                clearInterval(timerInterval);
+                eventSource.close();
+                updateStatus('error', 'Connection lost or research failed');
+                elements.researchProgressBar.style.background = 'var(--error)';
+                setTimeout(() => {
+                    elements.startResearchBtn.disabled = false;
+                    elements.researchProgress.classList.add('hidden');
+                    showToast('Research failed or connection lost', 'error');
+                }, 2000);
+            };
+            
+            // 添加通用的 message 事件监听（调试用）
+            eventSource.addEventListener('message', (event) => {
+                console.log('SSE message event:', event.data);
+            });
+        }
+        
+        function updateStatus(status, message) {
+            if (elements.researchStatusText) {
+                elements.researchStatusText.textContent = message;
+            }
+            if (elements.currentStatus) {
+                elements.currentStatus.textContent = message;
+                elements.currentStatus.style.color = status === 'error' ? 'var(--error)' : status === 'completed' ? 'var(--success)' : 'var(--primary)';
+            }
+        }
+        
+        function updateProgress(percent) {
+            if (elements.researchProgressBar) {
+                elements.researchProgressBar.style.width = `${percent}%`;
+            }
+        }
+        
+        function updateProgressStage(stage) {
+            if (stage > state.statusStage) {
+                // Update previous stages to completed
+                for (let i = 1; i < stage; i++) {
+                    const step = document.getElementById(`statusStep${i}`);
+                    const line = document.getElementById(`statusLine${i}`);
+                    if (step) {
+                        const circle = step.querySelector('div');
+                        const text = step.querySelector('span');
+                        if (circle) {
+                            circle.style.background = 'var(--success)';
+                            circle.style.border = '2px solid var(--success)';
+                        }
+                        if (text) {
+                            text.style.color = 'var(--success)';
+                            text.style.fontWeight = '600';
+                        }
+                    }
+                    if (line) {
+                        line.style.background = 'var(--success)';
+                    }
+                }
+                
+                // Update current stage to active
+                const currentStep = document.getElementById(`statusStep${stage}`);
+                if (currentStep) {
+                    const circle = currentStep.querySelector('div');
+                    const text = currentStep.querySelector('span');
+                    if (circle) {
+                        circle.style.background = 'var(--primary)';
+                        circle.style.border = '2px solid var(--primary)';
+                        circle.style.animation = 'pulse 1.5s infinite';
+                    }
+                    if (text) {
+                        text.style.color = 'var(--primary)';
+                        text.style.fontWeight = '600';
+                    }
+                }
+                
+                state.statusStage = stage;
+            }
+        }
+
+        function getStructuredErrorMessage(payload) {
+            const t = translations[state.uiLang];
+            const code = payload?.code;
+            const hint = payload?.details?.hint;
+            if (code === 402 || hint === 'insufficient_credits_or_invalid_response') return t.error_insufficient_credits;
+            if (code === 429 || hint === 'rate_limit') return t.error_rate_limit;
+            if (code === 401 || hint === 'missing_api_key' || hint === 'auth') return t.error_auth;
+            if (code === 408 || hint === 'timeout') return t.error_timeout;
+            return payload?.message || t.research_failed;
+        }
+
+        function updateResearchProgress(data) {
+            const { status, data: payload } = data;
+            const t = translations[state.uiLang];
+
+            if (status === 'started' || status === 'pending' || status === 'in_progress') {
+                elements.researchStatusText.textContent = t.researching;
+            } else if (status === 'completed' && payload) {
+                elements.researchProgress.classList.add('hidden');
+                elements.researchPlaceholder.classList.add('hidden');
+                elements.researchResult.classList.remove('hidden');
+                elements.startResearchBtn.disabled = false;
+
+                // Display results
+                displayResearchResult(payload);
+            } else if (status === 'failed') {
+                elements.researchProgress.classList.add('hidden');
+                elements.startResearchBtn.disabled = false;
+                showToast(getStructuredErrorMessage(payload || {}), 'error');
+            }
+        }
+
+        function displayResearchResult(payload) {
+            const content = payload.content || '';
+            const sources = payload.sources || [];
+            const query = state.currentResearch?.query || 'Research';
+            const model = state.currentResearch?.model || 'auto';
+
+            elements.researchTitle.textContent = query.substring(0, 100);
+            elements.researchMeta.innerHTML = `
+                <span><i class="fas fa-robot"></i> Model: ${model.toUpperCase()}</span>
+                <span><i class="fas fa-clock"></i> ${new Date().toLocaleString()}</span>
+            `;
+
+            // Render markdown first
+            renderMarkdown(elements.researchContent, content);
+            
+            // Then make citations clickable
+            makeCitationsClickable(elements.researchContent);
+
+            // Display sources
+            if (sources.length > 0) {
+                elements.researchSourcesList.innerHTML = sources.map((s, index) => {
+                    const url = s.url || '#';
+                    const title = (s.title || url).substring(0, 80);
+                    const favicon = s.favicon ? 
+                        `<img src="${escapeHtml(s.favicon)}" alt="" class="source-favicon" onerror="this.style.display='none'">` : 
+                        '<i class="fas fa-link source-favicon"></i>';
+                    const citationNum = index + 1;
+                    
+                    return `
+                        <div class="research-source-item" id="reference-${citationNum}" style="scroll-margin-top: 2rem;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--primary); color: white; border-radius: 50%; font-size: 0.8125rem; font-weight: 600; flex-shrink: 0;">${citationNum}</span>
+                                ${favicon}
+                            </div>
+                            <div class="source-info">
+                                <a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="source-title">${escapeHtml(title)}</a>
+                                <span class="source-url">${escapeHtml(url)}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                elements.researchSourcesList.innerHTML = '<p style="color: var(--text-muted);">No sources</p>';
+            }
+
+            // Store for saving
+            state.currentResearch.content = content;
+            state.currentResearch.sources = sources;
+            state.currentResearch.completed_at = Date.now();
+        }
+
+        // ============================================
+        // Save & Export
+        // ============================================
+        async function saveResearch() {
+            if (!state.currentResearch?.content) {
+                showToast('No research to save', 'error');
+                return;
+            }
+
+            const title = prompt('Enter research title:', state.currentResearch.query.substring(0, 50));
+            if (!title) return;
+
+            try {
+                const response = await fetch('/api/research/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title,
+                        query: state.currentResearch.query,
+                        content: state.currentResearch.content,
+                        sources: state.currentResearch.sources,
+                        model: state.currentResearch.model,
+                        citation_format: state.currentResearch.citation_format
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showToast(translations[state.uiLang].research_saved, 'success');
+                    state.currentResearch.id = data.research_id;
+                    loadResearchHistory();
+                } else {
+                    throw new Error('Save failed');
+                }
+            } catch (error) {
+                showToast('Save failed: ' + error.message, 'error');
+            }
+        }
+
+        async function exportToNotion() {
+            if (!state.currentResearch?.id) {
+                showToast('Please save research first', 'error');
+                return;
+            }
+
+            elements.loadingOverlay.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`/api/research/${state.currentResearch.id}/export/notion`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    window.open(data.notion_url, '_blank');
+                    showToast(translations[state.uiLang].notion_exported, 'success');
+                } else {
+                    throw new Error('Export failed');
+                }
+            } catch (error) {
+                showToast('Export failed: ' + error.message, 'error');
+            } finally {
+                elements.loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        function copyToClipboard() {
+            if (!state.currentResearch?.content) {
+                showToast('No content to copy', 'error');
+                return;
+            }
+
+            navigator.clipboard.writeText(state.currentResearch.content).then(() => {
+                showToast(translations[state.uiLang].copied, 'success');
+            }).catch(err => {
+                showToast('Copy failed: ' + err.message, 'error');
+            });
+        }
+
+        // ============================================
+        // History
+        // ============================================
+        async function loadResearchHistory(forceRefresh = false) {
+            try {
+                console.log('Loading research history...', forceRefresh ? '(refresh)' : '');
+                const url = forceRefresh ? '/api/research?refresh=1' : '/api/research';
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    console.error('Failed to fetch research history:', response.status);
+                    return;
+                }
+
+                const data = await response.json();
+                console.log('Research history loaded:', data.researches?.length || 0, 'items');
+                
+                if (!elements.researchHistoryList) {
+                    console.error('Research history list element not found!');
+                    return;
+                }
+                
+                renderHistoryList(data.researches);
+            } catch (error) {
+                console.error('Failed to load history:', error);
+                showToast('Failed to load research history', 'error');
+            }
+        }
+
+        function renderHistoryList(researches) {
+            if (!elements.researchHistoryList) {
+                console.error('Cannot render history: element not found');
+                return;
+            }
+            
+            elements.researchHistoryList.innerHTML = '';
+
+            if (!researches || researches.length === 0) {
+                console.log('No research history to display');
+                elements.researchHistoryList.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 2rem;">${translations[state.uiLang]?.no_history || 'No research history yet'}</p>`;
+                return;
+            }
+
+            console.log(`Rendering ${researches.length} research items`);
+            researches.forEach(research => {
+                const item = document.createElement('div');
+                item.className = 'research-history-item';
+                item.style.cssText = `
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 1rem;
+                    padding: 1rem;
+                    background: var(--bg-surface-hover);
+                    border-radius: var(--radius-md);
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    border: 1px solid transparent;
+                    margin-bottom: 0.75rem;
+                    max-width: 100%;
+                    box-sizing: border-box;
+                    overflow: hidden;
+                `;
+                
+                item.innerHTML = `
+                    <div class="research-history-content" style="flex: 1; min-width: 0; width: 100%; overflow: hidden;">
+                        <div class="research-history-title" style="font-weight: 600; margin-bottom: 0.25rem; color: var(--text-main); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;">${escapeHtml(research.title)}</div>
+                        <div class="research-history-meta" style="font-size: 0.75rem; color: var(--text-muted); display: flex; gap: 1rem; overflow: hidden;">
+                            <span><i class="fas fa-clock"></i> ${new Date(research.created_at).toLocaleDateString()}</span>
+                            <span><i class="fas fa-robot"></i> ${research.model?.toUpperCase() || 'AUTO'}</span>
+                            <span><i class="fas fa-file-alt"></i> ${research.sources_count || 0} sources</span>
+                        </div>
+                    </div>
+                    <div class="research-history-actions" style="display: flex; gap: 0.5rem; flex-shrink: 0; flex-shrink: 0; min-width: 80px;">
+                        <button class="research-history-action-btn" title="View" onclick="event.stopPropagation(); loadResearch('${research.id}')" style="padding: 0.35rem; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; border-radius: var(--radius-sm); transition: all 0.2s ease;">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="research-history-action-btn" title="Delete" onclick="event.stopPropagation(); deleteResearch('${research.id}')" style="padding: 0.35rem; border: none; background: transparent; color: var(--text-secondary); cursor: pointer; border-radius: var(--radius-sm); transition: all 0.2s ease;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                
+                // Add hover effects
+                item.onmouseover = () => {
+                    item.style.background = 'var(--bg-elevated)';
+                    item.style.borderColor = 'var(--primary)';
+                    item.style.transform = 'translateX(4px)';
+                };
+                
+                item.onmouseout = () => {
+                    item.style.background = 'var(--bg-surface-hover)';
+                    item.style.borderColor = 'transparent';
+                    item.style.transform = 'translateX(0)';
+                };
+                
+                // Click to load
+                item.querySelector('.research-history-content').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    loadResearch(research.id);
+                });
+                
+                elements.researchHistoryList.appendChild(item);
+            });
+        }
+
+        let loadResearchAbortController = null;
+        async function loadResearch(id) {
+            if (!id) return;
+            if (loadResearchAbortController) loadResearchAbortController.abort();
+            loadResearchAbortController = new AbortController();
+            const signal = loadResearchAbortController.signal;
+            try {
+                const response = await fetch(`/api/research/${encodeURIComponent(id)}`, { signal });
+                if (!response.ok) throw new Error('Load failed');
+
+                const data = await response.json();
+                if (data.id !== id) return;
+                
+                // Display in result panel
+                elements.researchPlaceholder.classList.add('hidden');
+                elements.researchResult.classList.remove('hidden');
+                
+                elements.researchTitle.textContent = data.title;
+                elements.researchMeta.innerHTML = `
+                    <span><i class="fas fa-robot"></i> Model: ${(data.model || 'auto').toUpperCase()}</span>
+                    <span><i class="fas fa-clock"></i> ${new Date(data.created_at).toLocaleString()}</span>
+                `;
+                
+                renderMarkdown(elements.researchContent, data.content || '');
+                
+                // Display sources with reference IDs
+                const sources = data.sources || [];
+                if (sources.length > 0) {
+                    elements.researchSourcesList.innerHTML = sources.map((s, index) => {
+                        const url = s.url || '#';
+                        const title = (s.title || url).substring(0, 80);
+                        const citationNum = index + 1;
+                        return `
+                            <div class="research-source-item" id="reference-${citationNum}" style="scroll-margin-top: 4rem;">
+                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                    <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--primary); color: white; border-radius: 50%; font-size: 0.8125rem; font-weight: 600; flex-shrink: 0;">${citationNum}</span>
+                                    <i class="fas fa-link source-favicon"></i>
+                                </div>
+                                <div class="source-info">
+                                    <a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="source-title">${escapeHtml(title)}</a>
+                                    <span class="source-url">${escapeHtml(url)}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    elements.researchSourcesList.innerHTML = '<p style="color: var(--text-muted);">No sources</p>';
+                }
+                
+                // Bind citation click events AFTER rendering both content and sources
+                makeCitationsClickable(elements.researchContent);
+
+                state.currentResearch = data;
+                
+                // Show chat section after loading research
+                const chatSection = document.getElementById('researchChatSection');
+                if (chatSection) {
+                    chatSection.classList.remove('hidden');
+                    // Load chat history for this research
+                    loadChatHistory(data.id);
+                    console.log('Chat section displayed');
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                showToast('Load failed: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteResearch(id) {
+            if (!confirm('Delete this research?')) return;
+
+            try {
+                const response = await fetch(`/api/research/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showToast('Research deleted', 'success');
+                    loadResearchHistory();
+                } else {
+                    throw new Error('Delete failed');
+                }
+            } catch (error) {
+                showToast('Delete failed: ' + error.message, 'error');
+            }
+        }
+
+        // ============================================
+        // Theme & Language
+        // ============================================
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+
+            document.getElementById('themeToggleBtn').addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-theme');
+                const next = current === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                updateThemeIcon(next);
+            });
+
+            function updateThemeIcon(theme) {
+                const icon = document.querySelector('#themeToggleBtn i');
+                if (icon) {
+                    icon.className = theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+                }
+            }
+        }
+
+        function initLanguage() {
+            const savedLang = localStorage.getItem('uiLang') || 'en';
+            state.uiLang = savedLang;
+            updateLanguageLabel(savedLang);
+
+            document.getElementById('langToggleBtn').addEventListener('click', () => {
+                state.uiLang = state.uiLang === 'en' ? 'zh' : 'en';
+                localStorage.setItem('uiLang', state.uiLang);
+                updateLanguageLabel(state.uiLang);
+                applyTranslations();
+            });
+
+            function updateLanguageLabel(lang) {
+                const label = document.getElementById('langLabel');
+                if (label) label.textContent = lang === 'en' ? 'EN' : '中文';
+            }
+
+            function applyTranslations() {
+                const t = translations[state.uiLang];
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    const key = el.getAttribute('data-i18n');
+                    if (t[key]) el.textContent = t[key];
+                });
+                document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                    const key = el.getAttribute('data-i18n-placeholder');
+                    if (t[key]) el.placeholder = t[key];
+                });
+                document.querySelectorAll('[data-i18n-title]').forEach(el => {
+                    const key = el.getAttribute('data-i18n-title');
+                    if (t[key]) el.title = t[key];
+                });
+            }
+        }
+
+        // ============================================
+        // Initialization
+        // ============================================
+        document.addEventListener('DOMContentLoaded', () => {
+            initElements();
+            initTheme();
+            initLanguage();
+            
+            // Initialize model options based on default provider
+            updateModelOptions('tavily');
+            
+            // Load research history after elements are initialized
+            loadResearchHistory();
+
+            // Event listeners
+            elements.startResearchBtn.addEventListener('click', startResearch);
+            elements.saveResearchBtn.addEventListener('click', saveResearch);
+            elements.exportNotionBtn.addEventListener('click', exportToNotion);
+            elements.copyResearchBtn.addEventListener('click', copyToClipboard);
+
+            const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+            if (refreshHistoryBtn) {
+                refreshHistoryBtn.addEventListener('click', async () => {
+                    refreshHistoryBtn.querySelector('i').classList.add('fa-spin');
+                    await loadResearchHistory(true);
+                    refreshHistoryBtn.querySelector('i').classList.remove('fa-spin');
+                });
+            }
+
+            // Logo click to go home
+            document.getElementById('logoBtn').addEventListener('click', () => {
+                window.location.href = '/';
+            });
+            
+            // Initialize research chat
+            initResearchChat();
+            
+            // Log initialization
+            console.log('Researcher page initialized');
+            console.log('Research history list element:', elements.researchHistoryList);
+        });
+        
+        // ============================================
+        // Research Chat Functionality
+        // ============================================
+        
+        let researchChatHistory = [];
+        
+        function initResearchChat() {
+            const sendChatBtn = document.getElementById('sendResearchChatBtn');
+            const chatInput = document.getElementById('researchChatInput');
+            
+            if (sendChatBtn) {
+                sendChatBtn.addEventListener('click', sendResearchChatMessage);
+            }
+            
+            if (chatInput) {
+                chatInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendResearchChatMessage();
+                    }
+                });
+                
+                // Auto-resize textarea
+                chatInput.addEventListener('input', function() {
+                    this.style.height = 'auto';
+                    this.style.height = (this.scrollHeight) + 'px';
+                    if (this.value === '') this.style.height = '';
+                });
+            }
+        }
+        
+        async function sendResearchChatMessage() {
+            const chatInput = document.getElementById('researchChatInput');
+            const message = chatInput?.value.trim();
+            
+            if (!message || !state.currentResearch?.id) {
+                showToast('Please complete a research first', 'error');
+                return;
+            }
+            
+            // Clear input
+            chatInput.value = '';
+            chatInput.style.height = '';
+            
+            // Show chat section if hidden
+            const chatSection = document.getElementById('researchChatSection');
+            if (chatSection) {
+                chatSection.classList.remove('hidden');
+            }
+            
+            // Add user message to UI
+            addResearchChatMessage('user', message);
+            
+            // Add loading placeholder
+            const loadingDiv = addResearchChatMessage('assistant', '<span class="typing">Thinking...</span>');
+            
+            // Send to API
+            try {
+                const response = await fetch('/api/research/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        research_id: state.currentResearch.id,
+                        message: message
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Chat request failed');
+                }
+                
+                const data = await response.json();
+                
+                // Update response
+                loadingDiv.innerHTML = `
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content"></div>
+                `;
+                
+                const contentDiv = loadingDiv.querySelector('.message-content');
+                contentDiv.innerHTML = converter.makeHtml(preprocessMarkdown(data.response.content || ''));
+                
+                // Apply syntax highlighting
+                contentDiv.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+                
+                // Apply KaTeX
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(contentDiv, {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false}
+                        ],
+                        throwOnError: false
+                    });
+                }
+                
+                // Do not reload; new messages are already in DOM
+                
+                // Scroll to bottom
+                const chatMessages = document.getElementById('researchChatMessages');
+                if (chatMessages) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+                
+            } catch (error) {
+                loadingDiv.remove();
+                showToast('Chat failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadChatHistory(researchId, loadMore = false) {
+            try {
+                const offset = loadMore ? state.chatPagination.offset + CHAT_PAGE_LIMIT : 0;
+                const url = `/api/research/${researchId}/chat?limit=${CHAT_PAGE_LIMIT}&offset=${offset}`;
+                const response = await fetch(url);
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                state.chatPagination = { offset: offset + (data.messages?.length || 0), count: data.count };
+                
+                const chatMessages = document.getElementById('researchChatMessages');
+                if (!chatMessages) return;
+                
+                if (!loadMore) {
+                    chatMessages.innerHTML = '';
+                }
+                
+                if (!data.messages || data.messages.length === 0) {
+                    if (!loadMore) {
+                        chatMessages.innerHTML = `
+                            <div class="chat-welcome" style="text-align: center; color: var(--text-secondary); margin-top: 2rem;">
+                                <i class="fas fa-robot" style="font-size: 2.5rem; color: var(--primary); opacity: 0.8; margin-bottom: 1rem;"></i>
+                                <p data-i18n="chat_research_welcome">Hello! I have read this research report. What questions do you have?</p>
+                            </div>
+                        `;
+                    }
+                    return;
+                }
+                
+                if (loadMore) {
+                    const loadMoreBtn = chatMessages.querySelector('.chat-load-more');
+                    if (loadMoreBtn) loadMoreBtn.remove();
+                    const ref = chatMessages.firstChild;
+                    data.messages.reverse().forEach(msg => {
+                        const el = createChatMessageElement(msg.role, msg.content);
+                        chatMessages.insertBefore(el, ref);
+                    });
+                    if (data.count > state.chatPagination.offset) {
+                        insertLoadMoreButton(chatMessages, researchId);
+                    }
+                } else {
+                    data.messages.forEach(msg => {
+                        addResearchChatMessage(msg.role, msg.content, false);
+                    });
+                    if (data.count > CHAT_PAGE_LIMIT) {
+                        insertLoadMoreButton(chatMessages, researchId);
+                    }
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+                
+                console.log(`Loaded ${data.messages.length}/${data.count} chat messages for research ${researchId}`);
+            } catch (error) {
+                console.error('Failed to load chat history:', error);
+            }
+        }
+        
+        function insertLoadMoreButton(chatMessages, researchId) {
+            const existing = chatMessages.querySelector('.chat-load-more');
+            if (existing) return;
+            const btn = document.createElement('button');
+            btn.className = 'chat-load-more';
+            btn.innerHTML = state.uiLang === 'zh' ? '加载更多消息' : 'Load more messages';
+            btn.style.cssText = 'margin: 0.5rem auto; padding: 0.5rem 1rem; border-radius: 0.5rem; background: var(--bg-surface-hover); border: 1px solid var(--border-color); color: var(--text-main); cursor: pointer;';
+            btn.addEventListener('click', () => loadChatHistory(researchId, true));
+            chatMessages.insertBefore(btn, chatMessages.firstChild);
+        }
+        
+        function createChatMessageElement(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${role}`;
+            messageDiv.style.cssText = `
+                max-width: 80%;
+                padding: 0.75rem 1rem;
+                border-radius: 1rem;
+                font-size: 0.9375rem;
+                line-height: 1.5;
+                align-self: ${role === 'user' ? 'flex-end' : 'flex-start'};
+                background: ${role === 'user' ? 'var(--primary)' : 'var(--bg-surface-hover)'};
+                color: ${role === 'user' ? 'white' : 'var(--text-main)'};
+                border: ${role === 'user' ? 'none' : '1px solid var(--border-color)'};
+                border-bottom-${role === 'user' ? 'right' : 'left'}-radius: 0.25rem;
+                margin-bottom: 0.5rem;
+            `;
+            if (role === 'user') {
+                messageDiv.innerHTML = `<div class="message-content">${escapeHtml(content)}</div>`;
+            } else {
+                const html = converter ? converter.makeHtml(preprocessMarkdown(content)) : escapeHtml(content);
+                messageDiv.innerHTML = `
+                    <div class="message-avatar" style="font-size: 0.75rem; margin-bottom: 0.25rem; opacity: 0.7;">
+                        <i class="fas fa-robot"></i> AI Assistant
+                    </div>
+                    <div class="message-content">${html}</div>
+                `;
+                messageDiv.querySelectorAll('pre code').forEach(block => hljs && hljs.highlightElement(block));
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(messageDiv, { delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError: false });
+                }
+            }
+            return messageDiv;
+        }
+        
+        // ============================================
+        // Citation Linking Functionality
+        // ============================================
+        
+        let citationScrollPositions = new Map(); // Store scroll positions for back navigation
+        
+        function makeCitationsClickable(container) {
+            // Find all citation markers like [1], [2], [1, 3], etc.
+            const contentDiv = container;
+            if (!contentDiv) return;
+            
+            // Process all text nodes to find citations
+            const walker = document.createTreeWalker(
+                contentDiv,
+                NodeFilter.SHOW_TEXT,
+                null
+            );
+            
+            const nodesToReplace = [];
+            let node;
+            
+            while (node = walker.nextNode()) {
+                const text = node.textContent;
+                // Match citation patterns like [1], [2, 3], [1,2,3]
+                const citationRegex = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
+                if (citationRegex.test(text)) {
+                    nodesToReplace.push({
+                        node: node,
+                        text: text
+                    });
+                }
+            }
+            
+            // Replace nodes with clickable citations
+            nodesToReplace.forEach(({node, text}) => {
+                const span = document.createElement('span');
+                span.innerHTML = text.replace(
+                    /\[(\d+(?:\s*,\s*\d+)*)\]/g,
+                    (match, numbers) => {
+                        const nums = numbers.split(',').map(n => n.trim());
+                        const citationHTML = nums.map(num => 
+                            `<a href="#reference-${num}" class="citation-link" data-citation="${num}" title="Jump to reference ${num}">${num}</a>`
+                        ).join(', ');
+                        return `[${citationHTML}]`;
+                    }
+                );
+                node.parentNode.replaceChild(span, node);
+            });
+            
+            // Add click handlers
+            const citationLinks = contentDiv.querySelectorAll('.citation-link');
+            citationLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const citationNum = link.getAttribute('data-citation');
+                    jumpToReference(citationNum, link);
+                });
+            });
+        }
+        
+        function jumpToReference(citationNum, sourceElement) {
+            console.log('Jumping to reference:', citationNum);
+            
+            // Store current scroll position
+            const currentScroll = elements.researchContent.scrollTop;
+            citationScrollPositions.set(`ref-${citationNum}`, currentScroll);
+            
+            // Find the reference section
+            const referenceSection = document.getElementById(`reference-${citationNum}`);
+            console.log('Reference element found:', referenceSection);
+            
+            if (referenceSection) {
+                // Highlight the reference temporarily
+                referenceSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                // Add highlight effect
+                referenceSection.style.transition = 'all 0.3s ease';
+                referenceSection.style.background = 'rgba(99, 102, 241, 0.15)';
+                referenceSection.style.borderLeft = '4px solid var(--primary)';
+                referenceSection.style.padding = '0.75rem';
+                
+                // Show back button
+                showBackButton(sourceElement, citationNum);
+                
+                // Remove highlight after 3 seconds
+                setTimeout(() => {
+                    referenceSection.style.background = '';
+                    referenceSection.style.borderLeft = '';
+                    referenceSection.style.padding = '';
+                }, 3000);
+            } else {
+                console.warn('Reference not found:', citationNum);
+                showToast('Reference not found', 'error');
+            }
+        }
+        
+        function showBackButton(sourceElement, citationNum) {
+            // Remove existing back button if any
+            const existingBackBtn = document.getElementById('backToCitationBtn');
+            if (existingBackBtn) {
+                existingBackBtn.remove();
+            }
+            
+            // Create back button
+            const backBtn = document.createElement('button');
+            backBtn.id = 'backToCitationBtn';
+            backBtn.innerHTML = `<i class="fas fa-arrow-up"></i> Back to citation [${citationNum}]`;
+            backBtn.style.cssText = `
+                position: fixed;
+                bottom: 2rem;
+                right: 2rem;
+                padding: 0.75rem 1.5rem;
+                background: var(--primary);
+                color: white;
+                border: none;
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                font-size: 0.9375rem;
+                font-weight: 500;
+                box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+                z-index: 1000;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                animation: slideInRight 0.3s ease;
+                transition: all 0.2s ease;
+            `;
+            
+            backBtn.onmouseover = () => {
+                backBtn.style.transform = 'translateY(-2px)';
+                backBtn.style.boxShadow = '0 6px 16px rgba(99, 102, 241, 0.4)';
+            };
+            
+            backBtn.onmouseout = () => {
+                backBtn.style.transform = 'translateY(0)';
+                backBtn.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.3)';
+            };
+            
+            backBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Back button clicked, scrolling to clicked citation:', citationNum);
+                
+                // 回到用户点击的那个 citation（sourceElement），而非第一个同号的 citation
+                const citationLink = sourceElement?.isConnected ? sourceElement : document.querySelector(`.citation-link[data-citation="${citationNum}"]`);
+                if (citationLink) {
+                    citationLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    citationLink.style.transition = 'all 0.3s ease';
+                    citationLink.style.background = 'rgba(99, 102, 241, 0.2)';
+                    citationLink.style.padding = '0.2rem 0.4rem';
+                    citationLink.style.borderRadius = '4px';
+                    
+                    setTimeout(() => {
+                        citationLink.style.background = '';
+                        citationLink.style.padding = '';
+                    }, 1500);
+                } else {
+                    const scrollPos = citationScrollPositions.get(`ref-${citationNum}`);
+                    if (scrollPos !== undefined && elements.researchContent) {
+                        elements.researchContent.scrollTo({ top: scrollPos, behavior: 'smooth' });
+                    }
+                }
+                backBtn.remove();
+            };
+            
+            document.body.appendChild(backBtn);
+            
+            // Auto-hide after 10 seconds
+            setTimeout(() => {
+                if (backBtn.parentNode) {
+                    backBtn.style.animation = 'slideOutRight 0.3s ease';
+                    setTimeout(() => backBtn.remove(), 300);
+                }
+            }, 10000);
+        }
+        
+        // Add CSS animations for back button
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideInRight {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            
+            @keyframes slideOutRight {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+            }
+            
+            .citation-link {
+                color: var(--primary);
+                text-decoration: none;
+                font-weight: 600;
+                padding: 0.1rem 0.3rem;
+                border-radius: 4px;
+                transition: all 0.2s ease;
+                display: inline-block;
+            }
+            
+            .citation-link:hover {
+                background: rgba(99, 102, 241, 0.15);
+                text-decoration: underline;
+                transform: scale(1.05);
+            }
+            
+            .citation-link:active {
+                transform: scale(0.95);
+            }
+        `;
+        document.head.appendChild(style);
+        
+        function addResearchChatMessage(role, content, scroll = true) {
+            const chatMessages = document.getElementById('researchChatMessages');
+            if (!chatMessages) return null;
+            
+            // Remove welcome message if exists (only for first message)
+            const welcome = chatMessages.querySelector('.chat-welcome');
+            if (welcome && role === 'user') {
+                welcome.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${role}`;
+            messageDiv.style.cssText = `
+                max-width: 80%;
+                padding: 0.75rem 1rem;
+                border-radius: 1rem;
+                font-size: 0.9375rem;
+                line-height: 1.5;
+                position: relative;
+                word-wrap: break-word;
+                align-self: ${role === 'user' ? 'flex-end' : 'flex-start'};
+                background: ${role === 'user' ? 'var(--primary)' : 'var(--bg-surface-hover)'};
+                color: ${role === 'user' ? 'white' : 'var(--text-main)'};
+                border: ${role === 'user' ? 'none' : '1px solid var(--border-color)'};
+                border-bottom-${role === 'user' ? 'right' : 'left'}-radius: 0.25rem;
+                margin-bottom: 0.5rem;
+            `;
+            
+            if (role === 'user') {
+                messageDiv.innerHTML = `<div class="message-content">${escapeHtml(content)}</div>`;
+            } else {
+                const html = (typeof converter !== 'undefined' && typeof preprocessMarkdown === 'function')
+                    ? converter.makeHtml(preprocessMarkdown(content || ''))
+                    : escapeHtml(content || '');
+                messageDiv.innerHTML = `
+                    <div class="message-avatar" style="font-size: 0.75rem; margin-bottom: 0.25rem; opacity: 0.7;">
+                        <i class="fas fa-robot"></i> AI Assistant
+                    </div>
+                    <div class="message-content">${html}</div>
+                `;
+                messageDiv.querySelectorAll('pre code').forEach(block => { if (hljs) hljs.highlightElement(block); });
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(messageDiv, { delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError: false });
+                }
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            if (scroll) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+            
+            return messageDiv.querySelector('.message-content');
+        }
+    </script>
+</body>
+</html>

@@ -44,6 +44,10 @@
                     <i class="fas fa-globe"></i>
                     <span id="langLabel">EN</span>
                 </button>
+                <a href="/researcher" class="nav-btn" data-i18n-title="deep_research_title">
+                    <i class="fas fa-search-plus"></i>
+                    <span data-i18n="deep_research_title">Deep Research</span>
+                </a>
                 <button id="historyBtn" class="nav-btn" data-i18n-title="history">
                     <i class="fas fa-history"></i>
                     <span data-i18n="history">History</span>
@@ -445,6 +449,41 @@
 
 
     </main>
+
+    <!-- Deep Research Sidebar -->
+    <aside id="deepResearchSidebar" class="deep-research-sidebar hidden">
+        <div class="sidebar-header">
+            <h3><i class="fas fa-search-plus"></i> <span data-i18n="deep_research_title">Deep Research</span></h3>
+            <button id="closeDeepResearch" class="btn btn-icon">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="deep-research-form">
+            <label for="deepResearchQuery" data-i18n="deep_research_placeholder">Research topic</label>
+            <textarea id="deepResearchQuery" rows="3" placeholder="e.g. Latest developments in AI" data-i18n-placeholder="deep_research_placeholder"></textarea>
+            <label for="deepResearchModel" data-i18n="deep_research_model">Research Model</label>
+            <select id="deepResearchModel">
+                <option value="auto" data-i18n="deep_research_model_auto">Auto (Recommended)</option>
+                <option value="mini" data-i18n="deep_research_model_mini">Mini (Fast)</option>
+                <option value="pro" data-i18n="deep_research_model_pro">Pro (Comprehensive)</option>
+            </select>
+            <button id="startDeepResearchBtn" class="btn btn-primary btn-block">
+                <i class="fas fa-play"></i> <span data-i18n="deep_research_button">Start Research</span>
+            </button>
+        </div>
+        <div id="deepResearchProgress" class="deep-research-progress hidden">
+            <div class="deep-research-status">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span id="deepResearchStatusText" data-i18n="deep_research_progress">Researching...</span>
+            </div>
+        </div>
+        <div id="deepResearchResult" class="deep-research-result hidden">
+            <h4 data-i18n="deep_research_report">Research Report</h4>
+            <div id="deepResearchContent" class="deep-research-content markdown-body"></div>
+            <h4 data-i18n="deep_research_sources">Sources</h4>
+            <div id="deepResearchSources" class="deep-research-sources"></div>
+        </div>
+    </aside>
 
     <!-- History Sidebar -->
     <aside id="historySidebar" class="history-sidebar hidden">

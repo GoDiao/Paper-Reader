@@ -37,6 +37,7 @@ data/reports.json
 data/parse_cache/
 data/reports.json.bak
 *.pdf
+deep_research/
 
 # MinerU (external parser cache: models / checkpoints)
 MinerU/ckpt/
@@ -52,3 +53,5 @@ plans/
 tmp/
 .ipynb_checkpoints/
 verify_search.py
+DEEP_RESEARCH_STREAMING.md
+test_sse.py

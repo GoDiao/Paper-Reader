@@ -32,6 +32,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.websocket_manager import WebSocketManager, ProgressCallback
 from backend.report_store import ReportStore
+from backend.research_store import ResearchStore
+from backend.research_chat_store import ResearchChatStore
 from backend.chat import ChatAgent
 from backend.export import write_md_to_pdf, write_md_to_word, create_images_zip
 from backend.websocket_manager import ProgressCallback
@@ -41,6 +43,9 @@ from agents.hierarchical_orchestrator import HierarchicalOrchestrator
 from generators.report_generator import ReportGenerator
 from config import LLMConfig, WebSearchConfig
 from services.resource_finder import ResourceFinder
+from services.tavily_service import TavilyService, TavilyServiceError
+from services.valyu_service import ValyuService, ValyuServiceError
+from backend.deep_research_utils import poll_research, validate_provider, build_progress_data
 from ImageGo.imagego import rewrite_markdown_images_via_imgbb
 
 # Setup logging
@@ -93,9 +98,34 @@ class NotionExportRequest(BaseModel):
     include_specialists: bool = True
 
 
+class DeepResearchRequest(BaseModel):
+    query: str
+    session_id: str
+    provider: str = "tavily"  # "tavily" or "valyu"
+    model: str = "auto"  # Tavily: mini/pro/auto, Valyu: fast/standard/heavy/max
+    citation_format: str = "numbered"  # numbered, mla, apa, chicago
+
+
 # Global instances
 ws_manager = WebSocketManager()
 report_store = ReportStore(DATA_DIR / "reports.json")
+research_store = ResearchStore(DATA_DIR / "researches.json")
+research_chat_store = ResearchChatStore(DATA_DIR / "research_chats.json")
+tavily_service = TavilyService()
+valyu_service = ValyuService()  # Valyu Deep Research service
+
+
+def _normalize_research_content(raw: Any) -> str:
+    """Normalize research output to string (handles Valyu/Tavily string, dict, or SDK object)."""
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, dict):
+        out = raw.get("markdown") or raw.get("content") or raw.get("text")
+        return out if isinstance(out, str) else json.dumps(raw, ensure_ascii=False, indent=2)
+    out = getattr(raw, "markdown", None) or getattr(raw, "content", None) or getattr(raw, "text", None)
+    return out if isinstance(out, str) else str(raw)
 
 
 def _strip_first_h1(markdown: str) -> str:
@@ -152,6 +182,16 @@ def _import_md2notionpage():
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info("Paper Reader API starting...")
+    logger.info(f"DATA_DIR: {DATA_DIR}")
+    logger.info(f"Research DB path: {research_store.db_path}")
+    logger.info(f"Research DB exists: {research_store.db_path.exists()}")
+    
+    # Pre-load research store to verify data
+    try:
+        await research_store._load()
+        logger.info(f"Research store loaded: {len(research_store._cache)} items")
+    except Exception as e:
+        logger.error(f"Failed to load research store: {e}")
     
     # Mount static directories
     if FRONTEND_DIR.exists():
@@ -194,6 +234,18 @@ async def serve_frontend():
         return HTMLResponse(content="<h1>Frontend not found. Please build the frontend first.</h1>")
     
     with open(index_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/researcher", response_class=HTMLResponse)
+async def serve_researcher():
+    """Serve the Deep Research frontend page."""
+    researcher_path = FRONTEND_DIR / "researcher.html"
+    
+    if not researcher_path.exists():
+        return HTMLResponse(content="<h1>Researcher page not found.</h1>")
+    
+    with open(researcher_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 
@@ -643,6 +695,581 @@ async def run_analysis(
         await ws_manager.send_error(session_id, str(e))
 
 
+async def run_deep_research(
+    query: str,
+    session_id: str,
+    provider: str = "tavily",
+    model: str = "auto",
+    citation_format: str = "numbered",
+    auto_save: bool = True,
+):
+    """Background task: create research task (Tavily or Valyu) and poll until complete."""
+    provider = validate_provider(provider)
+    mode = model if model in ["fast", "standard", "heavy", "max"] else "standard"
+
+    try:
+        logger.info(f"Starting research with provider={provider}, model={model}")
+        if provider == "valyu":
+            service = valyu_service
+            await ws_manager.send_deep_research_progress(
+                session_id, "started", {"query": query, "provider": "valyu", "mode": mode}
+            )
+            create_result = await asyncio.to_thread(
+                service.create_research_task, query=query, mode=mode
+            )
+            request_id = create_result.get("deepresearch_id")
+        else:
+            service = tavily_service
+            await ws_manager.send_deep_research_progress(
+                session_id, "started", {"query": query, "provider": "tavily", "model": model}
+            )
+            create_result = await asyncio.to_thread(
+                service.create_research_task,
+                query=query,
+                model=model,
+                stream=False,
+                citation_format=citation_format,
+            )
+            if "stream" in create_result:
+                raise TavilyServiceError("Streaming mode not supported in this flow")
+            request_id = create_result.get("request_id")
+
+        if not request_id:
+            raise Exception(f"No request_id returned from {provider}")
+
+        async def on_progress(result: Dict[str, Any]) -> None:
+            st = result.get("status", "")
+            payload = build_progress_data(st, provider, request_id, result=result)
+            await ws_manager.send_deep_research_progress(session_id, st, payload)
+
+        result = await poll_research(
+            service, request_id, provider,
+            timeout=600.0, interval=3.0, on_progress=on_progress
+        )
+        status = result.get("status", "")
+
+        if status == "completed":
+            content = _normalize_research_content(result.get("output") or result.get("content"))
+            sources_raw = result.get("sources", [])
+            sources = []
+            for s in sources_raw:
+                if hasattr(s, "__dict__"):
+                    sources.append({
+                        "title": getattr(s, "title", ""),
+                        "url": getattr(s, "url", ""),
+                        "snippet": getattr(s, "snippet", ""),
+                        "source": getattr(s, "source", ""),
+                    })
+                else:
+                    sources.append(s)
+            research_id = None
+            if auto_save:
+                try:
+                    title = query[:100] + "..." if len(query) > 100 else query
+                    research_id = await research_store.create_research(
+                        title=title,
+                        query=query,
+                        content=content,
+                        sources=sources,
+                        model=model if provider == "tavily" else mode,
+                        citation_format=citation_format,
+                        metadata={"provider": provider}
+                    )
+                    logger.info(f"Auto-saved research: {research_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to auto-save research: {e}")
+            await ws_manager.send_deep_research_progress(
+                session_id,
+                "completed",
+                {
+                    "request_id": request_id,
+                    "content": content,
+                    "sources": sources,
+                    "research_id": research_id,
+                    "provider": provider,
+                },
+            )
+        elif status == "failed":
+            error_msg = result.get("error", result.get("detail", "Research failed"))
+            await ws_manager.send_deep_research_progress(
+                session_id,
+                "failed",
+                {"request_id": request_id, "message": error_msg, "provider": provider},
+            )
+    except TimeoutError as e:
+        logger.error(f"Deep Research timeout: {e}")
+        await ws_manager.send_deep_research_progress(
+            session_id, "failed",
+            {"message": str(e), "provider": provider, "code": 408, "details": {"hint": "timeout"}}
+        )
+    except (TavilyServiceError, ValyuServiceError) as e:
+        logger.error(f"Deep Research error: {e}")
+        data = {"message": str(e), "provider": provider}
+        if hasattr(e, "code") and e.code is not None:
+            data["code"] = e.code
+        if hasattr(e, "details") and e.details:
+            data["details"] = e.details
+        await ws_manager.send_deep_research_progress(session_id, "failed", data)
+    except Exception as e:
+        logger.error(f"Deep Research error: {e}", exc_info=True)
+        await ws_manager.send_deep_research_progress(
+            session_id, "failed", {"message": str(e), "provider": provider}
+        )
+
+
+# ============== Deep Research ==============
+
+class SaveResearchRequest(BaseModel):
+    title: str
+    query: str
+    content: str
+    sources: List[Dict[str, Any]]
+    model: str = "auto"
+    citation_format: str = "numbered"
+
+
+@app.post("/api/deep-research")
+async def start_deep_research(req: DeepResearchRequest):
+    """Create a Deep Research task (Tavily or Valyu). Progress is sent via WebSocket."""
+    try:
+        provider = validate_provider(req.provider)
+        asyncio.create_task(
+            run_deep_research(
+                query=req.query,
+                session_id=req.session_id,
+                provider=provider,
+                model=req.model,
+                citation_format=req.citation_format,
+                auto_save=True,
+            )
+        )
+        return {"status": "started", "message": "Research task started. Connect to WebSocket for progress."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"message": str(e)})
+    except (TavilyServiceError, ValyuServiceError) as e:
+        status = getattr(e, "code", None) if hasattr(e, "code") else None
+        if status is None or status < 400 or status >= 600:
+            status = 400
+        detail = {"message": str(e)}
+        if hasattr(e, "details") and e.details:
+            detail["details"] = e.details
+        raise HTTPException(status_code=status, detail=detail)
+
+
+@app.get("/api/deep-research/stream")
+async def stream_deep_research(
+    query: str,
+    provider: str = "tavily",
+    model: str = "auto",
+    citation_format: str = "numbered",
+):
+    """
+    Stream Deep Research results using Server-Sent Events (SSE).
+    Supports both Tavily and Valyu providers.
+    """
+    from sse_starlette.sse import EventSourceResponse
+
+    async def event_generator():
+        try:
+            prov = validate_provider(provider)
+        except ValueError as e:
+            yield {"event": "error", "data": json.dumps({"error": str(e), "provider": provider})}
+            return
+        mode = model if model in ["fast", "standard", "heavy", "max"] else "standard"
+        queue = asyncio.Queue()
+
+        async def run_poll():
+            try:
+                if prov == "valyu":
+                    service = valyu_service
+                    create_result = await asyncio.to_thread(
+                        service.create_research_task, query=query, mode=mode
+                    )
+                    request_id = create_result.get("deepresearch_id")
+                else:
+                    service = tavily_service
+                    create_result = await asyncio.to_thread(
+                        service.create_research_task,
+                        query=query,
+                        model=model,
+                        stream=False,
+                        citation_format=citation_format,
+                    )
+                    if "stream" in create_result:
+                        raise TavilyServiceError("Streaming mode not supported")
+                    request_id = create_result.get("request_id")
+
+                if not request_id:
+                    raise Exception(f"No request_id from {prov}")
+
+                async def on_progress(result: Dict[str, Any]) -> None:
+                    await queue.put(("progress", (request_id, result)))
+
+                final = await poll_research(
+                    service, request_id, prov,
+                    timeout=600.0, interval=3.0, on_progress=on_progress
+                )
+                await queue.put(("done", final))
+            except TimeoutError as e:
+                await queue.put(("error", e))
+            except (TavilyServiceError, ValyuServiceError) as e:
+                await queue.put(("error", e))
+            except Exception as e:
+                await queue.put(("error", e))
+
+        try:
+            yield {
+                "event": "started",
+                "data": json.dumps({"query": query, "provider": prov, "model": model})
+            }
+
+            asyncio.create_task(run_poll())
+
+            while True:
+                kind, data = await queue.get()
+                if kind == "progress":
+                    req_id, result = data if isinstance(data, tuple) else ("", data)
+                    st = result.get("status", "")
+                    progress_data = build_progress_data(st, prov, req_id, result=result)
+                    if st in ["running", "in_progress"]:
+                        msg = progress_data.get("message", "Research in progress...")
+                        if progress_data.get("progress"):
+                            p = progress_data["progress"]
+                            msg = f"Step {p.get('current_step', 0)}/{p.get('total_steps', 1)}"
+                        progress_data["message"] = msg
+                    yield {"event": "progress", "data": json.dumps(progress_data)}
+                elif kind == "done":
+                    result = data
+                    content = _normalize_research_content(result.get("output") or result.get("content"))
+                    sources_raw = result.get("sources", [])
+                    sources = []
+                    for s in sources_raw:
+                        if hasattr(s, "__dict__"):
+                            sources.append({
+                                "title": getattr(s, "title", ""),
+                                "url": getattr(s, "url", ""),
+                                "snippet": getattr(s, "snippet", ""),
+                                "source": getattr(s, "source", ""),
+                            })
+                        else:
+                            sources.append(s)
+                    request_id = result.get("request_id", result.get("deepresearch_id", ""))
+
+                    if content:
+                        for i in range(0, len(content), 500):
+                            yield {"event": "progress", "data": json.dumps({"content": content[i:i+500]})}
+                            await asyncio.sleep(0.05)
+
+                    yield {
+                        "event": "completed",
+                        "data": json.dumps({
+                            "status": "completed",
+                            "content": content,
+                            "sources": sources,
+                            "request_id": request_id,
+                            "provider": prov,
+                        })
+                    }
+                    break
+                elif kind == "error":
+                    e = data
+                    if isinstance(e, (TavilyServiceError, ValyuServiceError)):
+                        err_data = {"error": str(e), "provider": prov}
+                        if hasattr(e, "code") and e.code is not None:
+                            err_data["code"] = e.code
+                        if hasattr(e, "details") and e.details:
+                            err_data["details"] = e.details
+                        yield {"event": "error", "data": json.dumps(err_data)}
+                    else:
+                        yield {"event": "error", "data": json.dumps({"error": str(e), "provider": prov})}
+                    break
+        except Exception as e:
+            logger.error(f"SSE event generator error: {e}", exc_info=True)
+            yield {"event": "error", "data": json.dumps({"error": str(e), "provider": prov})}
+
+    return EventSourceResponse(event_generator())
+
+
+@app.get("/api/deep-research/{request_id}")
+async def get_deep_research_status(request_id: str):
+    """Get research task status and results (for polling without WebSocket)."""
+    try:
+        result = await asyncio.to_thread(tavily_service.get_task_status, request_id)
+        return result
+    except (TavilyServiceError, ValyuServiceError) as e:
+        status = getattr(e, "code", None) if hasattr(e, "code") else None
+        if status is None or status < 400 or status >= 600:
+            status = 400
+        detail = {"message": str(e)}
+        if hasattr(e, "details") and e.details:
+            detail["details"] = e.details
+        raise HTTPException(status_code=status, detail=detail)
+
+
+# ============== Research Save & History ==============
+
+@app.post("/api/research/save")
+async def save_research(req: SaveResearchRequest):
+    """Save a completed research to the database."""
+    try:
+        research_id = await research_store.create_research(
+            title=req.title,
+            query=req.query,
+            content=req.content,
+            sources=req.sources,
+            model=req.model,
+            citation_format=req.citation_format
+        )
+        return {"research_id": research_id, "status": "saved"}
+    except Exception as e:
+        logger.error(f"Failed to save research: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/research")
+async def list_research(limit: int = 50, refresh: bool = False):
+    """List all saved researches. Use ?refresh=1 to force reload from disk."""
+    try:
+        if refresh:
+            await research_store._load(force=True)
+        logger.info(f"Listing researches, db_path: {research_store.db_path}")
+        logger.info(f"Cache loaded: {research_store._loaded}, cache size: {len(research_store._cache)}")
+        
+        researches = await research_store.list_researches(limit)
+        logger.info(f"Found {len(researches)} researches")
+        
+        return {"researches": researches}
+    except Exception as e:
+        logger.error(f"Failed to list researches: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/research/{research_id}")
+async def get_research(research_id: str):
+    """Get a specific research by ID."""
+    try:
+        research = await research_store.get_research(research_id)
+        if not research:
+            raise HTTPException(status_code=404, detail="Research not found")
+        return research
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get research: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/research/{research_id}")
+async def delete_research(research_id: str):
+    """Delete a research."""
+    try:
+        success = await research_store.delete_research(research_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Research not found")
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete research: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ResearchChatRequest(BaseModel):
+    research_id: str
+    message: str
+
+
+@app.post("/api/research/chat")
+async def chat_with_research(request: ResearchChatRequest):
+    """Chat with AI about a research report."""
+    try:
+        # Get research
+        research = await research_store.get_research(request.research_id)
+        if not research:
+            raise HTTPException(status_code=404, detail="Research not found")
+        
+        # Get research content
+        research_content = research.get("content", "")
+        if not research_content:
+            raise HTTPException(status_code=400, detail="Research content is empty")
+        
+        # Get chat history
+        chat_history = await research_chat_store.get_chat_history(request.research_id)
+        
+        # Build prompt with research context and chat history
+        system_prompt = """You are an AI research assistant. You have read the research report and can answer questions about it.
+Your role is to:
+1. Explain complex concepts in simple terms
+2. Summarize key findings and insights
+3. Clarify any confusing points
+4. Provide additional context when helpful
+5. Be concise but thorough
+
+Always base your answers on the research content provided. If you don't know something, say so."""
+
+        # Build messages with chat history
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add last 10 messages from history for context
+        for msg in chat_history[-10:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        # Add current question
+        messages.append({
+            "role": "user",
+            "content": f"""Research Report Context:
+{research_content[:15000]}
+
+Current Question: {request.message}
+
+Please provide a helpful answer based on the research report and our conversation history."""
+        })
+
+        # Call LLM using the same pattern as Paper Reader
+        from config import LLMConfig
+        from llm.client_factory import LLMClientFactory
+        
+        llm_config = LLMConfig()
+        llm_factory = LLMClientFactory(llm_config)
+        
+        # Use the factory's client to make the chat call
+        response = llm_factory.client.chat.completions.create(
+            model=llm_config.model,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=2000
+        ).choices[0].message.content
+        
+        # Save user message and assistant response to chat history
+        now = int(time.time() * 1000)
+        await research_chat_store.add_message(request.research_id, "user", request.message, now)
+        await research_chat_store.add_message(request.research_id, "assistant", response, now + 1)
+        
+        return {
+            "response": {
+                "role": "assistant",
+                "content": response,
+                "timestamp": now + 1
+            },
+            "history_count": await research_chat_store.get_message_count(request.research_id)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Research chat error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/research/{research_id}/chat")
+async def get_research_chat_history(
+    research_id: str,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """Get chat history for a specific research with pagination."""
+    try:
+        total = await research_chat_store.get_message_count(research_id)
+        messages = await research_chat_store.get_chat_history(
+            research_id, limit=limit, offset=offset
+        )
+        return {
+            "research_id": research_id,
+            "messages": messages,
+            "count": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/research/{research_id}/chat")
+async def clear_research_chat_history(research_id: str):
+    """Clear chat history for a specific research."""
+    try:
+        success = await research_chat_store.clear_history(research_id)
+        return {"success": success}
+    except Exception as e:
+        logger.error(f"Failed to clear chat history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/research/{research_id}/export/notion")
+async def export_research_to_notion(research_id: str):
+    """Export research to Notion."""
+    try:
+        # Get research
+        research = await research_store.get_research(research_id)
+        if not research:
+            raise HTTPException(status_code=404, detail="Research not found")
+        
+        # Check required environment variables
+        missing = []
+        if not os.environ.get("NOTION_SECRET"):
+            missing.append("NOTION_SECRET")
+        if not os.environ.get("NOTION_PARENT_PAGE_ID"):
+            missing.append("NOTION_PARENT_PAGE_ID")
+        if not os.environ.get("IMGBB_API_KEY"):
+            missing.append("IMGBB_API_KEY")
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing config: {', '.join(missing)}")
+        
+        # Prepare content
+        content = research.get("content", "")
+        if not content:
+            raise HTTPException(status_code=400, detail="Research content is empty")
+        
+        # Add sources to content
+        sources = research.get("sources", [])
+        if sources:
+            sources_md = "\n\n## Sources\n\n"
+            for i, source in enumerate(sources, 1):
+                title = source.get("title", source.get("url", "Untitled"))
+                url = source.get("url", "#")
+                sources_md += f"{i}. [{title}]({url})\n"
+            content += sources_md
+        
+        # Process images through ImgBB
+        from ImageGo.imagego import rewrite_markdown_images_via_imgbb
+        md_dir = OUTPUT_DIR  # Use OUTPUT_DIR as base for any relative paths
+        cache_path = md_dir / ".imgbb-cache.json"
+        expiration_value = os.environ.get("IMGBB_EXPIRATION", "0")
+        try:
+            expiration = int(expiration_value)
+        except Exception:
+            expiration = 0
+        
+        content = rewrite_markdown_images_via_imgbb(
+            markdown=content,
+            md_dir=md_dir,
+            api_key=os.environ.get("IMGBB_API_KEY", ""),
+            expiration=expiration,
+            cache_path=cache_path
+        )
+        
+        # Export to Notion
+        from backend.app import _import_md2notionpage
+        md2notionpage = _import_md2notionpage()
+        title = (research.get("title") or research_id).strip() or research_id
+        notion_url = md2notionpage(
+            content,
+            title=title,
+            parent_page_id=os.environ.get("NOTION_PARENT_PAGE_ID", "")
+        )
+        
+        return {"notion_url": notion_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to export research to Notion: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     """WebSocket endpoint for real-time progress updates."""
@@ -671,6 +1298,26 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         parser, enable_web_search, language, max_iterations,
                     )
                 )
+            elif message.get("type") == "deep_research":
+                query = message.get("query", "").strip()
+                provider = message.get("provider", "tavily")
+                model = message.get("model", "auto")
+                citation_format = message.get("citation_format", "numbered")
+                if not query:
+                    await ws_manager.send_deep_research_progress(
+                        session_id, "failed", {"message": "Query is required"}
+                    )
+                else:
+                    try:
+                        provider = validate_provider(provider)
+                    except ValueError as e:
+                        await ws_manager.send_deep_research_progress(
+                            session_id, "failed", {"message": str(e), "provider": provider}
+                        )
+                    else:
+                        asyncio.create_task(
+                            run_deep_research(query, session_id, provider, model, citation_format)
+                        )
                 
     except WebSocketDisconnect:
         await ws_manager.disconnect(session_id)

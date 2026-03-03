@@ -128,7 +128,20 @@ const translations = {
         notion_exporting: 'Exporting to Notion...',
         notion_export_success: 'Notion page created',
         notion_export_failed: 'Notion export failed',
-        no_report: 'No report to export'
+        no_report: 'No report to export',
+
+        // Deep Research
+        deep_research_title: 'Deep Research',
+        deep_research_placeholder: 'e.g. Latest developments in AI',
+        deep_research_button: 'Start Research',
+        deep_research_model: 'Research Model',
+        deep_research_model_auto: 'Auto (Recommended)',
+        deep_research_model_mini: 'Mini (Fast)',
+        deep_research_model_pro: 'Pro (Comprehensive)',
+        deep_research_progress: 'Researching...',
+        deep_research_report: 'Research Report',
+        deep_research_sources: 'Sources',
+        deep_research_no_sources: 'No sources'
     },
     zh: {
         // Header
@@ -229,7 +242,20 @@ const translations = {
         notion_exporting: '正在导出到 Notion...',
         notion_export_success: 'Notion 页面已创建',
         notion_export_failed: 'Notion 导出失败',
-        no_report: '没有可导出的报告'
+        no_report: '没有可导出的报告',
+
+        // Deep Research
+        deep_research_title: '深度研究',
+        deep_research_placeholder: '例如：人工智能最新进展',
+        deep_research_button: '开始研究',
+        deep_research_model: '研究模型',
+        deep_research_model_auto: '自动（推荐）',
+        deep_research_model_mini: 'Mini（快速）',
+        deep_research_model_pro: 'Pro（全面）',
+        deep_research_progress: '研究中...',
+        deep_research_report: '研究报告',
+        deep_research_sources: '来源',
+        deep_research_no_sources: '暂无来源'
     }
 };
 
@@ -361,6 +387,19 @@ const elements = {
     historyList: document.getElementById('historyList'),
     historySearch: document.getElementById('historySearch'),
 
+    // Deep Research
+    deepResearchBtn: document.getElementById('deepResearchBtn'),
+    deepResearchSidebar: document.getElementById('deepResearchSidebar'),
+    closeDeepResearch: document.getElementById('closeDeepResearch'),
+    deepResearchQuery: document.getElementById('deepResearchQuery'),
+    deepResearchModel: document.getElementById('deepResearchModel'),
+    startDeepResearchBtn: document.getElementById('startDeepResearchBtn'),
+    deepResearchProgress: document.getElementById('deepResearchProgress'),
+    deepResearchStatusText: document.getElementById('deepResearchStatusText'),
+    deepResearchResult: document.getElementById('deepResearchResult'),
+    deepResearchContent: document.getElementById('deepResearchContent'),
+    deepResearchSources: document.getElementById('deepResearchSources'),
+
     // Utils
     toast: document.getElementById('toast'),
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -379,6 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initExport();
     initChat();
     initHistory();
+    initDeepResearch();
     initSpecialistReports();
     loadHistory();
 });
@@ -680,21 +720,32 @@ function connectWebSocket() {
     state.websocket.onopen = () => {
         console.log('WebSocket connected');
 
-        // Send analysis request
-        const enableWebSearch = elements.enableWebSearch ? elements.enableWebSearch.checked : false;
-        const maxIterations = elements.maxIterations ? parseInt(elements.maxIterations.value, 10) || 0 : 0;
-        state.websocket.send(JSON.stringify({
-            type: 'analyze',
-            upload_id: state.uploadId,
-            mode: elements.analysisMode.value,
-            provider: elements.llmProvider.value,
-            model: elements.llmModel.value,
-            verbose: false,
-            parser: elements.parserBackend ? elements.parserBackend.value : 'auto',
-            enable_web_search: enableWebSearch,
-            language: elements.outputLanguage ? elements.outputLanguage.value : 'en',
-            max_iterations: maxIterations
-        }));
+        if (state.pendingDeepResearch) {
+            const { query, model, citation_format } = state.pendingDeepResearch;
+            state.pendingDeepResearch = null;
+            state.websocket.send(JSON.stringify({
+                type: 'deep_research',
+                query,
+                model: model || 'auto',
+                citation_format: citation_format || 'numbered'
+            }));
+        } else {
+            // Send analysis request
+            const enableWebSearch = elements.enableWebSearch ? elements.enableWebSearch.checked : false;
+            const maxIterations = elements.maxIterations ? parseInt(elements.maxIterations.value, 10) || 0 : 0;
+            state.websocket.send(JSON.stringify({
+                type: 'analyze',
+                upload_id: state.uploadId,
+                mode: elements.analysisMode.value,
+                provider: elements.llmProvider.value,
+                model: elements.llmModel.value,
+                verbose: false,
+                parser: elements.parserBackend ? elements.parserBackend.value : 'auto',
+                enable_web_search: enableWebSearch,
+                language: elements.outputLanguage ? elements.outputLanguage.value : 'en',
+                max_iterations: maxIterations
+            }));
+        }
     };
 
     state.websocket.onmessage = (event) => {
@@ -712,12 +763,47 @@ function connectWebSocket() {
     };
 }
 
+function startDeepResearch() {
+    const query = (elements.deepResearchQuery && elements.deepResearchQuery.value || '').trim();
+    const model = elements.deepResearchModel ? elements.deepResearchModel.value : 'auto';
+    if (!query) {
+        showToast(state.uiLang === 'zh' ? '请输入研究主题' : 'Please enter a research topic', 'error');
+        return;
+    }
+    state.pendingDeepResearch = { query, model, citation_format: 'numbered' };
+    if (!state.sessionId) {
+        state.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+    if (state.websocket && state.websocket.readyState === WebSocket.OPEN) {
+        state.websocket.send(JSON.stringify({
+            type: 'deep_research',
+            query,
+            model,
+            citation_format: 'numbered'
+        }));
+        state.pendingDeepResearch = null;
+    } else {
+        connectWebSocket();
+    }
+    elements.deepResearchProgress.classList.remove('hidden');
+    elements.deepResearchResult.classList.add('hidden');
+    if (elements.deepResearchStatusText) {
+        const t = translations[state.uiLang] || translations.en;
+        elements.deepResearchStatusText.textContent = t.deep_research_progress || 'Researching...';
+    }
+    elements.startDeepResearchBtn.disabled = true;
+}
+
 function handleWebSocketMessage(data) {
     console.log('WS message:', data);
 
     switch (data.type) {
         case 'progress':
-            updateProgress(data);
+            if (data.phase === 'deep_research') {
+                updateDeepResearchProgress(data);
+            } else {
+                updateProgress(data);
+            }
             break;
         case 'complete':
             handleAnalysisComplete(data);
@@ -2301,6 +2387,67 @@ function addChatMessage(role, content) {
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
 
     return messageDiv;
+}
+
+// ============================================
+// Deep Research Panel
+// ============================================
+
+function initDeepResearch() {
+    // Check if deepResearchBtn is a link (new behavior) or button (old sidebar behavior)
+    if (!elements.deepResearchBtn) return;
+    
+    // If it's an anchor tag, it will navigate naturally
+    // If it's a button, use the old sidebar behavior
+    if (elements.deepResearchBtn.tagName === 'BUTTON' && elements.deepResearchSidebar) {
+        elements.deepResearchBtn.addEventListener('click', () => {
+            elements.deepResearchSidebar.classList.remove('hidden');
+            elements.deepResearchSidebar.classList.add('visible');
+        });
+        if (elements.closeDeepResearch) {
+            elements.closeDeepResearch.addEventListener('click', () => {
+                elements.deepResearchSidebar.classList.remove('visible');
+                elements.deepResearchSidebar.classList.add('hidden');
+            });
+        }
+    }
+    if (elements.startDeepResearchBtn) {
+        elements.startDeepResearchBtn.addEventListener('click', startDeepResearch);
+    }
+}
+
+function updateDeepResearchProgress(data) {
+    const { status, data: payload } = data;
+    const t = translations[state.uiLang] || translations.en;
+    if (elements.deepResearchStatusText) {
+        if (status === 'started') {
+            elements.deepResearchStatusText.textContent = t.deep_research_progress || 'Researching...';
+        } else if (status === 'pending' || status === 'in_progress') {
+            elements.deepResearchStatusText.textContent = t.deep_research_progress || 'Researching...';
+        } else if (status === 'completed' && payload) {
+            elements.deepResearchProgress.classList.add('hidden');
+            elements.deepResearchResult.classList.remove('hidden');
+            const content = payload.content || '';
+            if (elements.deepResearchContent && content) {
+                renderMarkdown(elements.deepResearchContent, content);
+            }
+            const sources = payload.sources || [];
+            if (elements.deepResearchSources) {
+                elements.deepResearchSources.innerHTML = sources.map(s => {
+                    const url = s.url || '#';
+                    const title = (s.title || url).substring(0, 60);
+                    const favicon = s.favicon ? `<img src="${escapeHtml(s.favicon)}" alt="" class="source-favicon" onerror="this.style.display='none'">` : '';
+                    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="deep-research-source">${favicon}<span class="source-title">${escapeHtml(title)}</span></a>`;
+                }).join('') || `<span class="no-sources">${t.deep_research_no_sources || 'No sources'}</span>`;
+            }
+        } else if (status === 'failed') {
+            elements.deepResearchProgress.classList.add('hidden');
+            showToast(payload?.message || 'Research failed', 'error');
+        }
+    }
+    if (status === 'completed' || status === 'failed') {
+        if (elements.startDeepResearchBtn) elements.startDeepResearchBtn.disabled = false;
+    }
 }
 
 // ============================================

@@ -9,10 +9,14 @@
   [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](MinerU/LICENSE.md)
   [![DeepSeek](https://img.shields.io/badge/DeepSeek-Powered-blue)](https://www.deepseek.com/)
   [![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991)](https://openai.com/)
+  [![Tavily](https://img.shields.io/badge/Tavily-Integrated-412991)](https://tavily.com/)
+  [![Valyu](https://img.shields.io/badge/Valyu-Supported-412991)](https://valyu.ai/)
 
-  **基于层级化多 Agent 架构的学术论文深度解析系统**
+  **基于层级化多 Agent 架构的学术论文深度解析系统 & AI 驱动的网络深度研究工具**
   
   [English](README.md) | 中文文档
+  
+  **快速链接**: [论文阅读](#-快速开始) | [深度研究](#-深度研究网络研究) | [文档](#-文档)
 </div>
 
 <br />
@@ -21,18 +25,36 @@
 
 **Paper Reader Agent** 是一个先进的 AI 系统，旨在像人类研究员一样深度阅读、分析并综合学术论文。
 
+**Deep Research** 是一个强大的 AI 驱动的网络研究工具，利用 Tavily 和 Valyu API 对任何主题进行全面、实时的研究，生成带有在线来源引用的详细报告。
+
+两者结合形成了完整的研究工作流：**Paper Reader** 用于深度论文分析，**Deep Research** 用于广泛主题探索。
+
 <details>
 <summary><b>📸 点击查看功能截图 (Showcase)</b></summary>
+
+### Paper Reader 论文阅读
 
 | **现代化双语 Web 界面** | **实时 Agent 协作进度** |
 |:---:|:---:|
 | <img src="assets/webui_zh.png" alt="中文界面" width="100%"/> | <img src="assets/progress_view.png" alt="分析进度" width="100%"/> |
 | *支持中英文一键切换* | *可视化 1+3+1 Agent 团队工作流* |
 
-| **出版级分析报告** | **专家深度分析 (新功能)** |
+| **出版级分析报告** | **专家深度分析** |
 |:---:|:---:|
 | <img src="assets/report_preview.png" alt="最终报告" width="100%"/> | <img src="assets/specialist.png" alt="专家报告" width="100%"/> |
 | *自动嵌入公式与插图* | *查看特定领域的深度洞察* |
+
+### Deep Research 深度研究
+
+| **独立研究页面** | **实时流式结果** |
+|:---:|:---:|
+| <img src="assets/DeepResearch/showcase.png" alt="Deep Research UI" width="100%"/> | <img src="assets/DeepResearch/Processing.png" alt="Research Processing" width="100%"/> |
+| *简洁专注的研究界面* | *实时流式传输与进度追踪* |
+
+| **研究管理面板** |
+|:---:|
+| <img src="assets/DeepResearch/dashboard.png" alt="Research Dashboard" width="100%"/> |
+| *管理研究历史、导出到 Notion* |
 
 </details>
 <br>

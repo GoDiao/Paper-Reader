@@ -9,10 +9,14 @@
   [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](MinerU/LICENSE.md)
   [![DeepSeek](https://img.shields.io/badge/DeepSeek-Powered-blue)](https://www.deepseek.com/)
   [![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991)](https://openai.com/)
+  [![Tavily](https://img.shields.io/badge/Tavily-Integrated-412991)](https://tavily.com/)
+  [![Valyu](https://img.shields.io/badge/Valyu-Supported-412991)](https://valyu.ai/)
 
-  **Hierarchical Multi-Agent System for Academic Paper Deep Analysis**
+  **Hierarchical Multi-Agent System for Academic Paper Deep Analysis & AI-Powered Web Research**
   
   [中文文档](README_zh.md) | English
+  
+  **Quick Links**: [Paper Reader](#-quick-start) | [Deep Research](#-deep-research-web-research) | [Documentation](#-documentation)
 </div>
 
 <br />
@@ -21,8 +25,14 @@
 
 **Paper Reader Agent** is an advanced AI system designed to read, analyze, and synthesize academic papers with a depth that matches human researchers.
 
+**Deep Research** is a powerful AI-powered web research tool that leverages Tavily and Valyu APIs to conduct comprehensive, real-time research on any topic, generating detailed reports with citations from online sources.
+
+Together, they form a complete research workflow: **Paper Reader** for deep paper analysis, and **Deep Research** for broad topic exploration.
+
 <details>
 <summary><b>📸 Click to see Screenshots (UI & Features)</b></summary>
+
+### Paper Reader
 
 | **Modern Web UI (Bilingual)** | **Real-time Progress Tracking** |
 |:---:|:---:|
@@ -33,6 +43,18 @@
 |:---:|:---:|
 | <img src="assets/report_preview.png" alt="Final Report" width="100%"/> | <img src="assets/specialist.png" alt="Specialist Reports" width="100%"/> |
 | *Auto-embedded figures & formulas* | *Rich details from specific domains* |
+
+### Deep Research
+
+| **Independent Research Page** | **Real-time Streaming Results** |
+|:---:|:---:|
+| <img src="assets/DeepResearch/showcase.png" alt="Deep Research UI" width="100%"/> | <img src="assets/DeepResearch/Processing.png" alt="Research Processing" width="100%"/> |
+| *Clean, focused research interface* | *Live streaming with progress tracking* |
+
+| **Research Dashboard** |
+|:---:|
+| <img src="assets/DeepResearch/dashboard.png" alt="Research Dashboard" width="100%"/> |
+| *Manage research history, export to Notion* |
 
 </details>
 <br>
@@ -61,18 +83,26 @@ The system operates using a "Divide and Conquer" strategy orchestrated by a cent
 
 ## ✨ Key Features
 
-### 🧠 Hierarchical Intelligence
+### 🧠 Paper Reader - Hierarchical Intelligence
 
 - **Architect Agent**: Strategic planning of what to read and where to focus.
 - **Context Hunter**: Digs for the "real" motivation and hidden assumptions.
 - **Math Specialist**: Derives equations and explains physical intuition behind formulas.
 - **Data Auditor**: Critically checks baselines, variance, and experimental fairness.
 
-### 👁️ Visual Understanding
+### 👁️ Paper Reader - Visual Understanding
 
 - **Smart Extraction**: Custom PDF parsing pipeline (based on PyMuPDF) that segments text and images.
 - **Context Preservation**: Figures are kept with their relevant text.
 - **Auto-Embedding**: The AI inserts figures into the report exactly when discussing them.
+
+### 🌐 Deep Research - Web-Powered Research
+
+- **Dual Provider Support**: Choose between Tavily (fast, reliable) and Valyu (comprehensive, multi-tier).
+- **Real-time Streaming**: Watch research progress live with SSE streaming technology.
+- **Citation Management**: Multiple citation formats (Numbered, APA, MLA, Chicago).
+- **Research History**: Persistent storage with browse, search, and delete capabilities.
+- **Export to Notion**: One-click export with full formatting, tables, and LaTeX equations.
 
 ### 💻 Modern Interaction
 
@@ -81,6 +111,7 @@ The system operates using a "Divide and Conquer" strategy orchestrated by a cent
   - `Simple`: Quick architect + math check.
   - `Hierarchical`: Full 5-agent deep dive.
 - **Bilingual**: Generates native-quality English and Chinese reports simultaneously.
+- **Independent Research Page**: Dedicated `/researcher` page for Deep Research with isolated history.
 
 ---
 
@@ -126,7 +157,7 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-Minimal `.env` (choose one):
+**Minimal `.env` (Paper Reader)**:
 
 ```env
 DEEPSEEK_API_KEY=sk-your-key
@@ -134,7 +165,22 @@ DEEPSEEK_API_KEY=sk-your-key
 OPENAI_API_KEY=sk-your-key
 ```
 
-Optional settings (web search enrichment + extra providers):
+**Deep Research Configuration** (add to `.env`):
+
+```env
+# Tavily API (required for Deep Research)
+TAVILY_API_KEY=tvly-your_api_key_here
+
+# Valyu API (alternative provider for Deep Research)
+VALYU_API_KEY=your_valyu_api_key_here
+
+# Notion Export (optional)
+NOTION_SECRET=your_notion_secret
+NOTION_PARENT_PAGE_ID=your_parent_page_id
+IMGBB_API_KEY=your_imgbb_api_key
+```
+
+**Optional settings** (web search enrichment + extra providers):
 
 ```env
 SILICONFLOW_API_KEY=your_siliconflow_api_key_here
@@ -154,7 +200,7 @@ Start the server to enjoy the full interactive experience.
 python web_server.py
 ```
 
-Open **<http://localhost:8000>** in your browser.
+Open **<http://localhost:8000>** in your browser for **Paper Reader**, or visit **<http://localhost:8000/researcher>** for **Deep Research**.
 
 > **Note (Simple mode in Web UI)**  
 > The `Simple` mode in the web UI is currently a placeholder and returns a brief message. Use `Hierarchical` mode for full reports.
@@ -164,7 +210,23 @@ Open **<http://localhost:8000>** in your browser.
 > - If MinerU (`pip install mineru`) is installed, it will try the **MinerU** backend first.  
 > - If MinerU is not installed or fails, it will automatically fall back to the **PyMuPDF** backend.
 
-#### 2. Command Line
+#### 2. Deep Research - Web Interface
+
+Access the dedicated Deep Research page at **<http://localhost:8000/researcher>**:
+
+1. Enter your research topic or question
+2. Select provider (Tavily or Valyu)
+3. Choose model and citation format
+4. Click "Start Research" and watch real-time streaming
+5. Save, export to Notion, or manage history
+
+> **Deep Research Features**:
+> - ✅ Real-time SSE streaming with progress tracking
+> - ✅ Markdown rendering with tables and LaTeX equations
+> - ✅ Persistent research history with search and delete
+> - ✅ One-click export to Notion with full formatting
+
+#### 3. Command Line
 
 ```bash
 # Full hierarchical analysis (Default, auto parser backend)
@@ -186,6 +248,8 @@ python main.py paper.pdf --provider openai --model gpt-4o
 python main.py paper.pdf --language zh
 ```
 
+> **Note**: Deep Research is currently only available through the web interface (`/researcher`). CLI support is planned for future releases.
+
 ### PDF Parsers: PyMuPDF vs MinerU
 
 - **PyMuPDF (Default, Fast)**  
@@ -206,9 +270,7 @@ python main.py paper.pdf --language zh
 
 ## 📂 Output Structure
 
-The system organizes outputs to keep your research clean:
-
-### Web mode (`python web_server.py`)
+### Paper Reader (Web mode: `python web_server.py`)
 
 ```text
 outputs/
@@ -223,7 +285,7 @@ data/
 └── reports.json
 ```
 
-### CLI mode (`python main.py ...`)
+### Paper Reader (CLI mode: `python main.py ...`)
 
 ```text
 output/
@@ -235,6 +297,19 @@ output/
     ├── specialists/
     └── figure_index.json
 ```
+
+### Deep Research (Web mode: `/researcher`)
+
+```text
+data/
+└── researches.json  # Independent research history storage
+```
+
+Research results are stored separately from paper analysis reports and include:
+- Full Markdown content with tables and LaTeX equations
+- Source list with titles, URLs, and favicons
+- Model and citation format metadata
+- Creation and update timestamps
 
 ---
 
@@ -251,12 +326,62 @@ paper_reader/
 ├── generators/             # 📝 The Scribe
 │   └── report_generator.py # Report Assembly
 ├── backend/                # 🔌 API Server
-└── frontend/               # 🖥️ Web UI
+│   ├── app.py              # Main FastAPI application
+│   ├── research_store.py   # Deep Research storage
+│   ├── deep_research_utils.py  # Deep Research utilities
+│   └── ...
+├── frontend/               # 🖥️ Web UI
+│   ├── index.html          # Paper Reader UI
+│   └── researcher.html     # Deep Research UI (Independent page)
+├── services/               # 🌐 External Services
+│   ├── tavily_service.py   # Tavily Deep Research API wrapper
+│   ├── valyu_service.py    # Valyu Deep Research API wrapper
+│   └── ...
+└── deep_research/          # 📚 Documentation
+    ├── tavily/             # Tavily API documentation
+    └── valyu/              # Valyu API documentation
 ```
 
 ---
 
 ## 🚀 Changelog
+
+### v2.0.0 - Deep Research Integration
+
+**🎉 Major Addition: Deep Research - AI-Powered Web Research Tool**
+
+- **🌐 Deep Research Feature**:
+  - Independent research page at `/researcher` with dedicated UI
+  - Dual provider support: Tavily (fast, reliable) and Valyu (comprehensive, multi-tier)
+  - Real-time SSE streaming with live progress tracking
+  - Multiple citation formats: Numbered, APA, MLA, Chicago
+  - Persistent research history with search and delete
+  - One-click export to Notion with full formatting
+
+- **🔧 Backend Infrastructure**:
+  - `ResearchStore` for independent research storage
+  - `TavilyService` and `ValyuService` wrappers
+  - Unified polling and progress tracking
+  - Structured error handling with code/details
+
+- **🖥️ Frontend Features**:
+  - Dedicated `researcher.html` page with modern glassmorphism design
+  - Real-time Markdown rendering with tables and LaTeX equations
+  - Research history panel with isolated storage
+  - Export to Notion with native tables and equations
+
+- **📊 API Endpoints**:
+  - `POST /api/deep-research` - Start research via WebSocket
+  - `GET /api/deep-research/stream` - SSE streaming endpoint
+  - `GET /api/research` - List research history
+  - `POST /api/research/save` - Save research
+  - `DELETE /api/research/{id}` - Delete research
+  - `POST /api/research/{id}/export/notion` - Export to Notion
+
+- **📚 Documentation**:
+  - Comprehensive API documentation for Tavily and Valyu
+  - Streaming implementation guide
+  - Independent page design documentation
 
 ### v1.7.0 - Iterative Analysis & Gap Agent
 
@@ -337,6 +462,15 @@ paper_reader/
 - **📊 Specialist Reports**: View detailed analysis from specific agents (Context Hunter, Math Specialist, Data Auditor) in dedicated tabs.
 - **🌐 Bilingual**: Added full English/Chinese language switching.
 - **🐛 Fixes**: Resolved table rendering issues and improved chat interface scrolling.
+
+## 📄 Documentation
+
+For detailed information about Deep Research features:
+
+- **[Deep Research Overview](DEEP_RESEARCH.md)** - Complete guide to Deep Research features
+- **[Tavily API Documentation](deep_research/tavily/)** - Tavily provider usage guide
+- **[Valyu API Documentation](deep_research/valyu/)** - Valyu provider usage guide
+- **[Streaming Implementation](DEEP_RESEARCH_STREAMING.md)** - SSE streaming technical details
 
 ## 🤝 Contributing
 

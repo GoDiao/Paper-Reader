@@ -160,6 +160,32 @@ class WebSocketManager:
             data=result or {},
         )
 
+    async def send_deep_research_progress(
+        self,
+        session_id: str,
+        status: str,
+        data: Optional[Dict] = None,
+    ):
+        """Send Deep Research progress event (started, progress, completed, failed)."""
+        d = data or {}
+        agent = d.get("provider", "tavily")
+        progress_pct = 100 if status in ("completed", "failed") else 0
+        if status in ("running", "in_progress") and d.get("progress"):
+            p = d["progress"]
+            cur = p.get("current_step", 0)
+            total = p.get("total_steps", 1)
+            if total > 0:
+                progress_pct = min(90, round(100 * cur / total))
+        await self.send_progress(
+            session_id,
+            phase="deep_research",
+            agent=agent,
+            status=status,
+            message=f"Deep Research: {status}",
+            progress=progress_pct,
+            data=d,
+        )
+
     async def send_iteration_info(
         self,
         session_id: str,
