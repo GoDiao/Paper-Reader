@@ -37,6 +37,7 @@ from backend.research_chat_store import ResearchChatStore
 from backend.chat import ChatAgent
 from backend.export import write_md_to_pdf, write_md_to_word, create_images_zip
 from backend.websocket_manager import ProgressCallback
+from backend.config_manager import config_manager
 
 from parsers.pdf_parser import PDFParser
 from agents.hierarchical_orchestrator import HierarchicalOrchestrator
@@ -192,6 +193,16 @@ async def lifespan(app: FastAPI):
         logger.info(f"Research store loaded: {len(research_store._cache)} items")
     except Exception as e:
         logger.error(f"Failed to load research store: {e}")
+
+    # Apply user config overrides (data/user_config.json) over .env
+    try:
+        overrides = await config_manager._load_user_overrides()
+        if overrides:
+            for k, v in overrides.items():
+                os.environ[k] = v
+            logger.info(f"Applied {len(overrides)} user config overrides")
+    except Exception as e:
+        logger.warning(f"Failed to load user config overrides: {e}")
     
     # Mount static directories
     if FRONTEND_DIR.exists():
@@ -249,10 +260,54 @@ async def serve_researcher():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/config", response_class=HTMLResponse)
+async def serve_config():
+    """Serve the configuration management page."""
+    config_path = FRONTEND_DIR / "config.html"
+    
+    if not config_path.exists():
+        return HTMLResponse(content="<h1>Config page not found.</h1>")
+    
+    with open(config_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "timestamp": int(time.time() * 1000)}
+
+
+# ============== Configuration Management ==============
+
+@app.get("/api/config")
+async def get_config():
+    """Get current configuration (values masked for secrets)."""
+    try:
+        config = await config_manager.get_current_config()
+        return config
+    except Exception as e:
+        logger.error(f"Failed to get config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/config")
+async def update_config(request: Request):
+    """Update configuration values."""
+    try:
+        data = await request.json()
+        updates = data.get("config", {})
+        
+        if not isinstance(updates, dict):
+            raise HTTPException(status_code=400, detail="Invalid config format")
+        
+        result = await config_manager.update_config(updates)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============== Upload ==============

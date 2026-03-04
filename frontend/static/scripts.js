@@ -34,6 +34,7 @@ const translations = {
         // Header
         history: 'History',
         delete: 'Delete',
+        configuration: 'Config',
 
         // Landing
         hero_title_1: 'AI-Powered',
@@ -147,6 +148,7 @@ const translations = {
         // Header
         history: '历史',
         delete: '删除',
+        configuration: '配置',
 
         // Landing
         hero_title_1: 'AI 驱动的',

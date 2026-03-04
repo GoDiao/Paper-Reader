@@ -50,31 +50,38 @@ class TavilyService:
         Initialize the Tavily service.
 
         Args:
-            api_key: Tavily API key. If None, reads from TAVILY_API_KEY env var.
+            api_key: Tavily API key. If None, reads from TAVILY_API_KEY env var
+                     lazily at first use (allows user config overrides at startup).
         """
         import os
-        self._api_key = api_key or os.getenv("TAVILY_API_KEY")
+        self._api_key = api_key  # None = read from os.environ at first use
         self._client = None
 
     def _get_client(self):
-        """Lazy-load the Tavily client."""
-        if self._client is None:
-            if not self._api_key:
-                raise TavilyServiceError(
-                    "TAVILY_API_KEY not set. Add it to .env or pass api_key.",
-                    code=401,
-                    details={"provider": "tavily", "hint": "missing_api_key"},
-                )
-            try:
-                from tavily import TavilyClient
-                self._client = TavilyClient(api_key=self._api_key)
-            except ImportError:
-                raise TavilyServiceError(
-                    "tavily-python not installed. Run: pip install tavily-python",
-                    code=500,
-                    details={"provider": "tavily", "hint": "missing_package"},
-                )
-        return self._client
+        """Lazy-load the Tavily client. Reads API key from os.environ at first use."""
+        import os
+        api_key = self._api_key if self._api_key is not None else os.getenv("TAVILY_API_KEY")
+        if not api_key:
+            raise TavilyServiceError(
+                "TAVILY_API_KEY not set. Add it to .env or pass api_key.",
+                code=401,
+                details={"provider": "tavily", "hint": "missing_api_key"},
+            )
+        # When using env (self._api_key is None), do not cache - support runtime config updates
+        if self._api_key is not None and self._client is not None:
+            return self._client
+        try:
+            from tavily import TavilyClient
+            client = TavilyClient(api_key=api_key)
+            if self._api_key is not None:
+                self._client = client
+            return client
+        except ImportError:
+            raise TavilyServiceError(
+                "tavily-python not installed. Run: pip install tavily-python",
+                code=500,
+                details={"provider": "tavily", "hint": "missing_package"},
+            )
 
     def create_research_task(
         self,

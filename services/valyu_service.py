@@ -49,31 +49,37 @@ class ValyuService:
         Initialize the Valyu service.
 
         Args:
-            api_key: Valyu API key. If None, reads from VALYU_API_KEY env var.
+            api_key: Valyu API key. If None, reads from VALYU_API_KEY env var
+                     lazily at first use (allows user config overrides at startup).
         """
-        self._api_key = api_key or os.getenv("VALYU_API_KEY")
+        self._api_key = api_key  # None = read from os.environ at first use
         self._client = None
 
     def _get_client(self):
-        """Lazy-load the Valyu client."""
-        if self._client is None:
-            if not self._api_key:
-                raise ValyuServiceError(
-                    "VALYU_API_KEY not set. Add it to .env or pass api_key.",
-                    code=401,
-                    details={"provider": "valyu", "hint": "missing_api_key"},
-                )
-            try:
-                from valyu import Valyu
-                self._client = Valyu(api_key=self._api_key)
-            except ImportError as e:
-                logger.error(f"Failed to import Valyu: {e}")
-                raise ValyuServiceError(
-                    f"valyu not installed. Run: pip install valyu. Error: {e}",
-                    code=500,
-                    details={"provider": "valyu", "hint": "missing_package"},
-                )
-        return self._client
+        """Lazy-load the Valyu client. Reads API key from os.environ at first use."""
+        api_key = self._api_key if self._api_key is not None else os.getenv("VALYU_API_KEY")
+        if not api_key:
+            raise ValyuServiceError(
+                "VALYU_API_KEY not set. Add it to .env or pass api_key.",
+                code=401,
+                details={"provider": "valyu", "hint": "missing_api_key"},
+            )
+        # When using env (self._api_key is None), do not cache - support runtime config updates
+        if self._api_key is not None and self._client is not None:
+            return self._client
+        try:
+            from valyu import Valyu
+            client = Valyu(api_key=api_key)
+            if self._api_key is not None:
+                self._client = client
+            return client
+        except ImportError as e:
+            logger.error(f"Failed to import Valyu: {e}")
+            raise ValyuServiceError(
+                f"valyu not installed. Run: pip install valyu. Error: {e}",
+                code=500,
+                details={"provider": "valyu", "hint": "missing_package"},
+            )
 
     def create_research_task(
         self,
