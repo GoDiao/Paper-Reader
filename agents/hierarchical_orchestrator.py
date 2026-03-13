@@ -482,47 +482,44 @@ class HierarchicalOrchestrator:
                 console.print("[yellow]⚠ Could not parse reading plan JSON[/yellow]")
                 return plan
         
-        # Fix common JSON issues from LLM output
+        # First pass: fix common JSON issues from LLM output
         json_str = self._fix_json_string(json_str)
+        
+        def _populate_plan_from_dict(data: Dict[str, Any]) -> None:
+            plan.paper_summary = data.get("paper_summary", "")
+            plan.domain = data.get("domain", "")
+            plan.context_hunter_task = data.get("context_hunter_task", {}) or {}
+            plan.math_specialist_task = data.get("math_specialist_task", {}) or {}
+            plan.data_auditor_task = data.get("data_auditor_task", {}) or {}
         
         try:
             data = json.loads(json_str)
-            plan.paper_summary = data.get("paper_summary", "")
-            plan.domain = data.get("domain", "")
-            plan.context_hunter_task = data.get("context_hunter_task", {})
-            plan.math_specialist_task = data.get("math_specialist_task", {})
-            plan.data_auditor_task = data.get("data_auditor_task", {})
+            _populate_plan_from_dict(data)
         except json.JSONDecodeError as e:
             console.print(f"[yellow]⚠ JSON parse error: {e}[/yellow]")
-            console.print("[yellow]  Attempting regex fallback extraction...[/yellow]")
+            console.print("[yellow]  Attempting LLM-based JSON repair...[/yellow]")
             
-            # Fallback: extract fields with regex
-            # Domain
+            repaired_json = self._repair_json_via_llm(json_str)
+            if repaired_json:
+                try:
+                    data = json.loads(repaired_json)
+                    _populate_plan_from_dict(data)
+                    console.print("[green]✓[/green] Reading plan JSON repaired via LLM")
+                    return plan
+                except json.JSONDecodeError as e2:
+                    console.print(f"[yellow]⚠ Repaired JSON still invalid: {e2}[/yellow]")
+            
+            console.print("[yellow]  Falling back to minimal regex extraction (no hardcoded sections).[/yellow]")
+            
+            # Fallback: extract minimal fields with regex (domain, summary), 
+            # but avoid forcing incorrect hardcoded sections.
             domain_match = re.search(r'"domain"\s*:\s*"([^"]+)"', response)
             if domain_match:
                 plan.domain = domain_match.group(1)
             
-            # Paper summary
             summary_match = re.search(r'"paper_summary"\s*:\s*"([^"]+)"', response)
             if summary_match:
                 plan.paper_summary = summary_match.group(1)
-            
-            # Extract sections for specialists (look for "sections" arrays)
-            sections_pattern = r'"sections"\s*:\s*\[([^\]]+)\]'
-            sections_matches = re.findall(sections_pattern, response)
-            
-            # Default sections for each specialist
-            default_sections = {
-                "context_hunter": ["Introduction", "Related Work", "Background"],
-                "math_specialist": ["Method", "Approach", "Methodology", "Model"],
-                "data_auditor": ["Experiments", "Results", "Evaluation", "Analysis", "Introduction", "Conclusion", "Abstract"]
-            }
-            
-            plan.context_hunter_task = {"sections": default_sections["context_hunter"]}
-            plan.math_specialist_task = {"sections": default_sections["math_specialist"]}
-            plan.data_auditor_task = {"sections": default_sections["data_auditor"]}
-            
-            console.print(f"[green]✓[/green] Fallback: domain='{plan.domain}', using default sections")
         
         return plan
     
@@ -575,6 +572,59 @@ class HierarchicalOrchestrator:
             i += 1
 
         return "".join(result)
+    
+    def _repair_json_via_llm(self, broken_json: str) -> Optional[str]:
+        """
+        Ask the LLM to repair a malformed JSON object instead of using
+        aggressive hardcoded fallbacks.
+        
+        The model is instructed to only fix syntax/formatting issues and to
+        preserve the original structure and field meanings as much as possible.
+        """
+        broken_json = broken_json.strip()
+        if not broken_json:
+            return None
+
+        user_prompt = (
+            "You are given a piece of text that is intended to be a single JSON object "
+            "for a reading plan, but it may contain syntax errors (trailing commas, "
+            "unescaped newlines, truncated strings, etc.).\n\n"
+            "Your task:\n"
+            "1. Repair this text into strictly valid JSON.\n"
+            "2. Preserve all existing keys and field meanings as much as possible.\n"
+            "3. If you must infer missing brackets or quotes, do so conservatively.\n"
+            "4. Do NOT add new top-level fields that did not exist before.\n"
+            "5. Respond with JSON ONLY, no explanations, no markdown.\n\n"
+            "Here is the broken JSON text:\n"
+            "```json\n"
+            f"{broken_json}\n"
+            "```"
+        )
+
+        try:
+            repaired = self._call_llm(
+                system=(
+                    "You are a strict JSON repair assistant. "
+                    "You only output valid JSON, with no extra commentary."
+                ),
+                user=user_prompt,
+                temperature=0.0,
+                max_tokens=self.max_tokens,
+                agent_name="JsonRepair",
+                agent_key="json_repair",
+                phase="analysis",
+                stream=False,
+            )
+            repaired = self._clean_llm_response(repaired)
+
+            # In case the model wraps the JSON in extra text, extract the first JSON object
+            match = re.search(r"\{[\s\S]*\}", repaired)
+            if match:
+                return match.group(0).strip()
+            return repaired.strip() or None
+        except Exception as e:
+            console.print(f"[yellow]⚠ JSON repair via LLM failed: {e}[/yellow]")
+            return None
     
     def _parse_specialist_output(
         self,
