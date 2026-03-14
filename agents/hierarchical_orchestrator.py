@@ -24,8 +24,8 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.panel import Panel
 
-from config import LLMConfig
-from llm import LLMClientFactory
+from config import LLMConfig, PerAgentModelConfig, AgentModelOverride
+from llm import LLMClientFactory, build_llm_config_for_agent
 
 from .hierarchical_prompts import (
     ARCHITECT_SYSTEM,
@@ -133,6 +133,8 @@ class HierarchicalOrchestrator:
         max_tokens: int = 8192,
         max_workers: int = 3,  # For parallel execution
         verbose: bool = False,  # Enable detailed logging
+        per_agent_model: Optional[PerAgentModelConfig] = None,
+        gap_agent_model: Optional[str] = None,
     ):
         """Initialize the hierarchical orchestrator."""
         self.provider = provider
@@ -141,6 +143,8 @@ class HierarchicalOrchestrator:
         self.max_tokens = max_tokens
         self.max_workers = max_workers
         self.verbose = verbose  # Store verbose flag
+        self.per_agent_model = per_agent_model or PerAgentModelConfig()
+        self.gap_agent_model = gap_agent_model
         
         # Create LLM config and factory
         llm_config = LLMConfig(
@@ -151,8 +155,9 @@ class HierarchicalOrchestrator:
             temperature=temperature,
             max_tokens=max_tokens
         )
-        
+        self.base_llm_config = llm_config
         self.factory = LLMClientFactory(llm_config)
+        self._agent_factories: Dict[str, LLMClientFactory] = {}
         
         # Store progress callback (set in analyze_paper)
         self.progress_callback: Optional[Any] = None
@@ -163,6 +168,41 @@ class HierarchicalOrchestrator:
             f"[dim]Max parallel workers: {max_workers} | Verbose: {verbose}[/dim]",
             border_style="blue"
         ))
+
+    def _get_agent_override(self, agent_role: Optional[str]) -> Optional[AgentModelOverride]:
+        """Get optional per-agent override config by role name."""
+        if not agent_role:
+            return None
+
+        # Backward compatibility: if dedicated gap_agent override is not set,
+        # honor the legacy gap_agent_model field by overriding model only.
+        if agent_role == "gap_agent":
+            gap_override = getattr(self.per_agent_model, "gap_agent", None)
+            if gap_override is not None:
+                return gap_override
+            if self.gap_agent_model:
+                return AgentModelOverride(model=self.gap_agent_model)
+
+        return getattr(self.per_agent_model, agent_role, None)
+
+    def _get_factory_for_role(self, agent_role: Optional[str]) -> LLMClientFactory:
+        """
+        Get cached LLM factory for agent role, falling back to default factory.
+        """
+        if not agent_role:
+            return self.factory
+
+        override = self._get_agent_override(agent_role)
+        if override is None:
+            return self.factory
+
+        if agent_role in self._agent_factories:
+            return self._agent_factories[agent_role]
+
+        effective_cfg = build_llm_config_for_agent(self.base_llm_config, override)
+        role_factory = LLMClientFactory(effective_cfg)
+        self._agent_factories[agent_role] = role_factory
+        return role_factory
     
     def analyze_paper(
         self,
@@ -364,7 +404,8 @@ class HierarchicalOrchestrator:
         agent_name: str = "LLM",
         agent_key: Optional[str] = None,
         phase: str = "analysis",
-        stream: bool = False
+        stream: bool = False,
+        agent_role: Optional[str] = None,
     ) -> str:
         """
         Make an LLM API call using unified factory with progress callbacks.
@@ -401,8 +442,10 @@ class HierarchicalOrchestrator:
             {"role": "system", "content": system},
             {"role": "user", "content": user}
         ]
+
+        role_factory = self._get_factory_for_role(agent_role)
         
-        result = self.factory.chat_completions(
+        result = role_factory.chat_completions(
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -442,7 +485,8 @@ class HierarchicalOrchestrator:
             temperature=0.2, 
             agent_name="Architect",
             agent_key="architect",
-            phase="analysis"
+            phase="analysis",
+            agent_role="architect",
         )
         response = self._clean_llm_response(response)
         
@@ -614,6 +658,7 @@ class HierarchicalOrchestrator:
                 agent_key="json_repair",
                 phase="analysis",
                 stream=False,
+                agent_role="architect",
             )
             repaired = self._clean_llm_response(repaired)
 
@@ -728,6 +773,7 @@ class HierarchicalOrchestrator:
             agent_key="gap_agent",
             phase="review",
             stream=False,
+            agent_role="gap_agent",
         )
         raw = self._clean_llm_response(raw)
         result = self._parse_gap_agent_output(raw)
@@ -906,6 +952,7 @@ class HierarchicalOrchestrator:
                         name,
                         "analysis",
                         True,
+                        name,
                     )
                     futures[future] = name
 
@@ -1090,7 +1137,8 @@ class HierarchicalOrchestrator:
                         name,  # agent_name for verbose logging
                         name,  # agent_key (matches frontend data-agent)
                         "analysis",  # phase
-                        True  # stream
+                        True,  # stream
+                        name,  # agent_role
                     )
                     futures[future] = name
                 
@@ -1174,7 +1222,9 @@ class HierarchicalOrchestrator:
                         None,  # max_tokens (use default)
                         f"Editor ({name})",  # agent_name
                         agent_key,  # agent_key (matches frontend data-agent)
-                        "assembly"  # phase
+                        "assembly",  # phase
+                        False,  # stream
+                        f"editor_{name}",  # agent_role
                     )
                     futures[future] = name
                 

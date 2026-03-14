@@ -42,7 +42,7 @@ from backend.config_manager import config_manager
 from parsers.pdf_parser import PDFParser
 from agents.hierarchical_orchestrator import HierarchicalOrchestrator
 from generators.report_generator import ReportGenerator
-from config import LLMConfig, WebSearchConfig
+from config import LLMConfig, WebSearchConfig, AppConfig, PerAgentModelConfig
 from services.resource_finder import ResourceFinder
 from services.tavily_service import TavilyService, TavilyServiceError
 from services.valyu_service import ValyuService, ValyuServiceError
@@ -73,8 +73,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 class AnalysisRequest(BaseModel):
     upload_id: str
     mode: str = "hierarchical"  # "simple" or "hierarchical"
-    provider: str = "deepseek"
-    model: str = "deepseek-chat"
+    provider: Optional[str] = None
+    model: Optional[str] = None
     verbose: bool = False
     parser: str = "auto"  # "auto", "mineru", "pymupdf"
     language: str = "en"  # "en" or "zh"
@@ -375,8 +375,8 @@ async def run_analysis(
     upload_id: str,
     session_id: str,
     mode: str,
-    provider: str,
-    model: str,
+    provider: Optional[str],
+    model: Optional[str],
     verbose: bool,
     parser_type: str = "auto",
     enable_web_search: bool = None,
@@ -530,18 +530,33 @@ async def run_analysis(
                 session_id, "analysis", "architect", "started",
                 "Creating reading plan...", 0
             )
+
+            # Build runtime app config from current env/user overrides,
+            # then apply request-level provider/model overrides.
+            app_config = AppConfig()
+            app_config.per_agent_model = PerAgentModelConfig.from_env()
+            env_default_provider = (os.getenv("DEFAULT_LLM_PROVIDER", "") or "").strip()
+            env_default_model = (os.getenv("DEFAULT_LLM_MODEL", "") or "").strip()
+
+            effective_provider = provider or env_default_provider or app_config.llm.provider
+            effective_model = model or env_default_model or app_config.llm.model
+
+            app_config.llm.provider = effective_provider
+            app_config.llm.model = effective_model
             
             # Determine max_workers based on provider to avoid rate limits
             max_workers = 3
-            if provider == "siliconflow":
+            if app_config.llm.provider == "siliconflow":
                 max_workers = 1  # Reduce concurrency for Silicon Flow to avoid 429 errors
                 
             orchestrator = HierarchicalOrchestrator(
-                provider=provider,
-                model=model,
-                max_tokens=LLMConfig(model=model).get_max_tokens(),
+                provider=app_config.llm.provider,
+                model=app_config.llm.model,
+                temperature=app_config.llm.temperature,
+                max_tokens=app_config.llm.get_max_tokens(),
                 max_workers=max_workers,
-                verbose=verbose
+                verbose=verbose,
+                per_agent_model=app_config.per_agent_model,
             )
             
             # Run analysis using asyncio.to_thread (no need for separate ThreadPoolExecutor)
@@ -1340,8 +1355,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 # Start analysis in background
                 upload_id = message.get("upload_id")
                 mode = message.get("mode", "hierarchical")
-                provider = message.get("provider", "deepseek")
-                model = message.get("model", "deepseek-chat")
+                provider = message.get("provider")
+                model = message.get("model")
                 verbose = message.get("verbose", False)
                 parser = message.get("parser", "auto")
                 enable_web_search = message.get("enable_web_search")

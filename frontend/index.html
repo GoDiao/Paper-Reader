@@ -105,24 +105,13 @@
                                 <option value="simple" data-i18n="mode_simple">Simple (Dual Role)</option>
                             </select>
                         </div>
-                        <div class="setting-item">
-                            <label for="llmProvider" data-i18n="llm_provider">LLM Provider</label>
-                            <select id="llmProvider">
-                                <option value="deepseek" selected>DeepSeek</option>
-                                <option value="openai">OpenAI</option>
-                                <option value="siliconflow">Silicon Flow</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label for="llmModel" data-i18n="model">Model</label>
-                            <select id="llmModel">
-                                <option value="deepseek-chat" selected>deepseek-chat</option>
-                                <option value="deepseek-r1">deepseek-r1 (Reasoning)</option>
-                                <option value="gpt-4o">gpt-4o</option>
-                                <option value="gpt-4o-mini">gpt-4o-mini</option>
-                                <option value="o1">o1 (Reasoning)</option>
-                                <option value="o1-mini">o1-mini</option>
-                            </select>
+                        <div class="setting-item setting-item-full">
+                            <label>LLM Model Routing</label>
+                            <p class="setting-hint">
+                                Provider/model selection is managed in Configuration to avoid ambiguity.
+                                Go to <a href="/config" style="color: var(--primary);">Config</a> and set
+                                <code>DEFAULT_LLM_PROVIDER</code>, <code>DEFAULT_LLM_MODEL</code>, and per-agent model overrides.
+                            </p>
                         </div>
                         <div class="setting-item">
                             <label for="parserBackend" data-i18n="parser_backend">Parser Backend</label>
@@ -520,6 +509,6 @@
         </div>
     </div>
 
-    <script src="/static/scripts.js?v=14"></script>
+    <script src="/static/scripts.js?v=15"></script>
 </body>
 </html>

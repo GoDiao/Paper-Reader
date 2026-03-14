@@ -345,8 +345,6 @@ const elements = {
 
     // Settings
     analysisMode: document.getElementById('analysisMode'),
-    llmProvider: document.getElementById('llmProvider'),
-    llmModel: document.getElementById('llmModel'),
     parserBackend: document.getElementById('parserBackend'),
     outputLanguage: document.getElementById('outputLanguage'),
     enableWebSearch: document.getElementById('enableWebSearch'),
@@ -569,54 +567,7 @@ function initUpload() {
     // Start analysis button
     elements.startAnalysisBtn.addEventListener('click', startAnalysis);
 
-    // Dynamic model filtering based on provider
-    const llmProviderSelect = document.getElementById('llmProvider');
-    const llmModelSelect = document.getElementById('llmModel');
-
-    if (llmProviderSelect && llmModelSelect) {
-        llmProviderSelect.addEventListener('change', () => {
-            updateModelOptions(llmProviderSelect.value, llmModelSelect);
-        });
-        // Initialize with current provider selection
-        updateModelOptions(llmProviderSelect.value, llmModelSelect);
-    }
-}
-
-// Model options for each provider
-const modelOptions = {
-    deepseek: [
-        { value: 'deepseek-chat', label: 'deepseek-chat' },
-        { value: 'deepseek-reasoner', label: 'deepseek-r1 (Reasoning)' }
-    ],
-    openai: [
-        { value: 'gpt-4o', label: 'gpt-4o' },
-        { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
-        { value: 'o1', label: 'o1 (Reasoning)' },
-        { value: 'o1-mini', label: 'o1-mini' }
-    ],
-    siliconflow: [
-        { value: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek-V3' },
-        { value: 'deepseek-ai/DeepSeek-R1', label: 'DeepSeek-R1 (Reasoning)' },
-        { value: 'deepseek-ai/DeepSeek-V3.2', label: 'DeepSeek-V3.2' },
-        { value: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen2.5-72B' },
-        { value: 'Qwen/Qwen2.5-Coder-32B-Instruct', label: 'Qwen2.5-Coder-32B' },
-        { value: 'MiniMaxAI/MiniMax-M2.1', label: 'MiniMax-M2.1' },
-        { value: 'zai-org/GLM-4.7', label: 'GLM-4.7' },
-        { value: 'moonshotai/Kimi-K2-Thinking', label: 'Kimi-K2 (Thinking)' }
-    ]
-};
-
-function updateModelOptions(provider, selectElement) {
-    const models = modelOptions[provider] || modelOptions.deepseek;
-    selectElement.innerHTML = '';
-
-    models.forEach((model, index) => {
-        const option = document.createElement('option');
-        option.value = model.value;
-        option.textContent = model.label;
-        if (index === 0) option.selected = true;
-        selectElement.appendChild(option);
-    });
+    // Model/provider are configured in /config to avoid duplicated entry points.
 }
 
 async function handleFileUpload(file) {
@@ -739,8 +690,6 @@ function connectWebSocket() {
                 type: 'analyze',
                 upload_id: state.uploadId,
                 mode: elements.analysisMode.value,
-                provider: elements.llmProvider.value,
-                model: elements.llmModel.value,
                 verbose: false,
                 parser: elements.parserBackend ? elements.parserBackend.value : 'auto',
                 enable_web_search: enableWebSearch,

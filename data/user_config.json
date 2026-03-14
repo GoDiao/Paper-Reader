@@ -1,0 +1,10 @@
+{
+  "DEFAULT_LLM_PROVIDER": "openrouter",
+  "DEFAULT_LLM_MODEL": "openrouter/hunter-alpha",
+  "DEEPSEEK_API_KEY": "abc123",
+  "LLM_TIMEOUT_S": "200.0",
+  "LLM_MAX_RETRIES": "3",
+  "LLM_MAX_CONCURRENCY": "3",
+  "ENABLE_WEB_SEARCH": "true",
+  "NOTION_PARENT_PAGE_ID": "diao"
+}

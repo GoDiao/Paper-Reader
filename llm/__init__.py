@@ -10,11 +10,13 @@ Provides unified LLM client creation and API call handling with:
 from .client_factory import (
     create_llm_client,
     chat_completions_create,
+    build_llm_config_for_agent,
     LLMClientFactory,
 )
 
 __all__ = [
     "create_llm_client",
     "chat_completions_create",
+    "build_llm_config_for_agent",
     "LLMClientFactory",
 ]

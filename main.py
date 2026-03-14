@@ -81,7 +81,7 @@ Examples:
     parser.add_argument(
         "--provider",
         type=str,
-        choices=["openai", "deepseek"],
+        choices=["openai", "deepseek", "siliconflow", "openrouter"],
         default="deepseek",
         help="LLM API provider (default: deepseek)"
     )
@@ -265,7 +265,12 @@ def main():
     # Determine model
     model = args.model
     if model is None:
-        model = "deepseek-chat" if args.provider == "deepseek" else "gpt-4o"
+        if args.provider == "deepseek":
+            model = "deepseek-chat"
+        elif args.provider == "openrouter":
+            model = "openai/gpt-4o-mini"
+        else:
+            model = "gpt-4o"
     console.print(f"[blue]🧠 Model:[/blue] {model}")
     
     if args.mode == "hierarchical":

@@ -54,6 +54,87 @@
             margin-bottom: 0;
         }
 
+        .config-category.agent-models {
+            border-color: rgba(99, 102, 241, 0.35);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.08);
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 0.875rem 1rem;
+        }
+
+        .config-grid.agent-grid {
+            grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+        }
+
+        .config-grid .config-field {
+            margin-bottom: 0;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: color-mix(in oklab, var(--bg-surface) 85%, var(--bg-surface-hover, #f4f4f5));
+        }
+
+        .agent-card {
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: color-mix(in oklab, var(--bg-surface) 88%, var(--bg-surface-hover, #f4f4f5));
+            padding: 0.75rem;
+        }
+
+        .agent-card-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 0.55rem;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
+
+        .agent-pair {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.625rem;
+        }
+
+        .agent-pair .config-field {
+            margin-bottom: 0;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 0.625rem;
+            background: var(--bg-surface);
+        }
+
+        .agent-pair .config-field-description {
+            margin-top: 0.25rem;
+        }
+
+        @media (max-width: 1200px) {
+            .config-grid.agent-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .agent-pair {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .field-chip {
+            display: inline-block;
+            font-size: 0.6875rem;
+            padding: 0.15rem 0.45rem;
+            border-radius: 999px;
+            margin-left: 0.35rem;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            vertical-align: middle;
+        }
+
         .config-field-label {
             display: block;
             font-size: 0.875rem;
@@ -232,6 +313,8 @@
     <script>
         let currentConfig = {};
         let originalConfig = {};
+        const fieldElements = {};
+        let defaultLlmModel = '';
 
         const translations = {
             en: {
@@ -258,9 +341,12 @@
 
         const FALLBACK_SCHEMA = {
             general: { title: 'General Settings', fields: [
+                { key: 'DEFAULT_LLM_PROVIDER', label: 'Default LLM Provider', description: 'Homepage analysis uses this provider', placeholder: 'deepseek', is_secret: false },
+                { key: 'DEFAULT_LLM_MODEL', label: 'Default LLM Model', description: 'Homepage analysis uses this model', placeholder: 'deepseek-chat', is_secret: false },
                 { key: 'DEEPSEEK_API_KEY', label: 'DeepSeek API Key', description: 'Default provider', placeholder: 'sk-...', is_secret: true, required: true },
                 { key: 'OPENAI_API_KEY', label: 'OpenAI API Key', description: 'Alternative provider', placeholder: 'sk-...', is_secret: true },
                 { key: 'SILICONFLOW_API_KEY', label: 'SiliconFlow API Key', description: 'Another provider', placeholder: 'sk-...', is_secret: true },
+                { key: 'OPENROUTER_API_KEY', label: 'OpenRouter API Key', description: 'OpenRouter provider key', placeholder: 'sk-or-v1-...', is_secret: true },
             ]},
             deep_research: { title: 'Deep Research', fields: [
                 { key: 'TAVILY_API_KEY', label: 'Tavily API Key', description: 'For Tavily Deep Research', placeholder: 'tvly-...', is_secret: true },
@@ -268,12 +354,247 @@
             ]},
         };
 
+        const providerOptions = ['', 'deepseek', 'openai', 'siliconflow', 'openrouter'];
+        const providerModelSuggestions = {
+            deepseek: [
+                'deepseek-chat',
+                'deepseek-reasoner',
+                'deepseek/deepseek-r1'
+            ],
+            openai: [
+                'gpt-4o',
+                'gpt-4o-mini',
+                'o1',
+                'o1-mini',
+                'openai/gpt-4o',
+                'openai/gpt-4o-mini'
+            ],
+            siliconflow: [
+                'deepseek-ai/DeepSeek-V3',
+                'deepseek-ai/DeepSeek-R1',
+                'Qwen/Qwen2.5-72B-Instruct'
+            ],
+            openrouter: [
+                'deepseek/deepseek-chat',
+                'deepseek/deepseek-reasoner',
+                'anthropic/claude-3.5-sonnet',
+                'openrouter/hunter-alpha'
+            ],
+            default: [
+                'deepseek-chat',
+                'deepseek-reasoner',
+                'gpt-4o',
+                'gpt-4o-mini',
+                'o1',
+                'o1-mini',
+                'deepseek/deepseek-r1',
+                'openai/gpt-4o',
+                'openai/gpt-4o-mini',
+                'anthropic/claude-3.5-sonnet',
+                'openrouter/hunter-alpha'
+            ]
+        };
+
+        function createProviderSelect(field) {
+            const select = document.createElement('select');
+            select.className = 'config-field-input' + (field.has_value ? ' has-value' : '');
+            select.dataset.key = field.key;
+            select.dataset.placeholder = field.placeholder || '';
+            select.title = field.has_value ? translations.en.hasValue : translations.en.noValue;
+            providerOptions.forEach(value => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value || 'Use default';
+                if ((field.value || '') === value) option.selected = true;
+                select.appendChild(option);
+            });
+            return select;
+        }
+
+        function createModelInput(field) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'config-field-input' + (field.has_value ? ' has-value' : '');
+            input.placeholder = field.placeholder || 'Enter model id...';
+            input.dataset.key = field.key;
+            input.dataset.placeholder = field.placeholder || '';
+            input.value = field.value || '';
+            input.title = field.has_value ? translations.en.hasValue : translations.en.noValue;
+            const datalistId = 'modelSuggestions';
+            input.setAttribute('list', datalistId);
+            return input;
+        }
+
+        function ensureModelSuggestionList() {
+            if (document.getElementById('modelSuggestions')) return;
+            const dl = document.createElement('datalist');
+            dl.id = 'modelSuggestions';
+            document.body.appendChild(dl);
+            updateModelSuggestionList('default');
+        }
+
+        function updateModelSuggestionList(provider) {
+            const dl = document.getElementById('modelSuggestions');
+            if (!dl) return;
+            dl.innerHTML = '';
+            const list = providerModelSuggestions[provider] || providerModelSuggestions.default;
+            list.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                dl.appendChild(opt);
+            });
+        }
+
+        function extractAgentLabel(fieldKey) {
+            const core = fieldKey
+                .replace(/^AGENT_/, '')
+                .replace(/_(PROVIDER|MODEL)$/, '');
+            return core
+                .split('_')
+                .map(s => s.charAt(0) + s.slice(1).toLowerCase())
+                .join(' ');
+        }
+
+        function buildFieldElement(field) {
+            const fieldDiv = document.createElement('div');
+            fieldDiv.className = 'config-field';
+
+            const label = document.createElement('label');
+            label.className = 'config-field-label';
+            label.textContent = field.label;
+            if (field.key.endsWith('_PROVIDER')) {
+                const chip = document.createElement('span');
+                chip.className = 'field-chip';
+                chip.textContent = 'provider';
+                label.appendChild(chip);
+            } else if (field.key.endsWith('_MODEL')) {
+                const chip = document.createElement('span');
+                chip.className = 'field-chip';
+                chip.textContent = 'model';
+                label.appendChild(chip);
+            }
+            if (field.required) {
+                const req = document.createElement('span');
+                req.className = 'required';
+                req.textContent = ' *';
+                label.appendChild(req);
+            }
+            fieldDiv.appendChild(label);
+
+            let input;
+            if (field.key.endsWith('_PROVIDER') || field.key === 'DEFAULT_LLM_PROVIDER') {
+                input = createProviderSelect(field);
+            } else if (field.key.endsWith('_MODEL') || field.key === 'DEFAULT_LLM_MODEL') {
+                input = createModelInput(field);
+            } else {
+                input = document.createElement('input');
+                input.type = field.is_secret ? 'password' : 'text';
+                input.className = 'config-field-input' + (field.has_value ? ' has-value' : '');
+                input.placeholder = field.placeholder || 'Enter value...';
+                input.dataset.key = field.key;
+                input.dataset.placeholder = field.placeholder || '';
+                input.value = field.is_secret ? '' : (field.value || '');
+                input.title = field.has_value ? translations.en.hasValue : translations.en.noValue;
+            }
+
+            fieldDiv.appendChild(input);
+
+            // 注册到全局映射，方便 provider/model 之间联动
+            fieldElements[field.key] = input;
+
+            // provider 改变时，控制对应 model 的启用状态和建议列表（仅 per-agent 冻结）
+            if (field.key.endsWith('_PROVIDER')) {
+                input.addEventListener('change', () => {
+                    const providerKey = field.key;
+                    const modelKey = providerKey.replace('_PROVIDER', '_MODEL');
+                    const modelInput = fieldElements[modelKey];
+                    if (!modelInput) return;
+
+                    const providerValue = (input.value || '').trim();
+                    // Per-agent: if provider is default, freeze model以显示 General default model
+                    if (!providerValue) {
+                        modelInput.disabled = true;
+                        modelInput.value = '';
+                        modelInput.placeholder = defaultLlmModel || (modelInput.dataset.placeholder || 'Use default');
+                        modelInput.classList.remove('has-value');
+                    } else {
+                        modelInput.disabled = false;
+                        modelInput.placeholder = modelInput.dataset.placeholder || 'Enter model id...';
+                    }
+
+                    updateModelSuggestionList(providerValue || 'default');
+                });
+            }
+
+            // model 获取焦点时，按当前 provider 过滤建议
+            if (field.key.endsWith('_MODEL') || field.key === 'DEFAULT_LLM_MODEL') {
+                input.addEventListener('focus', () => {
+                    const modelKey = field.key;
+                    if (modelKey === 'DEFAULT_LLM_MODEL') {
+                        // 全局默认模型：始终给完整候选列表，避免过度耦合
+                        updateModelSuggestionList('default');
+                    } else {
+                        const providerKey = modelKey.replace('_MODEL', '_PROVIDER');
+                        const providerInput = fieldElements[providerKey];
+                        const providerValue = providerInput ? (providerInput.value || '').trim() : '';
+                        updateModelSuggestionList(providerValue || 'default');
+                    }
+                });
+            }
+
+            const desc = document.createElement('div');
+            desc.className = 'config-field-description';
+            desc.textContent = field.description;
+            fieldDiv.appendChild(desc);
+
+            currentConfig[field.key] = '';
+            return fieldDiv;
+        }
+
+        function renderAgentModelPairs(fieldContainer, fields) {
+            const pairsByAgent = {};
+            fields.forEach(field => {
+                const label = extractAgentLabel(field.key);
+                if (!pairsByAgent[label]) {
+                    pairsByAgent[label] = { provider: null, model: null, others: [] };
+                }
+                if (field.key.endsWith('_PROVIDER')) {
+                    pairsByAgent[label].provider = field;
+                } else if (field.key.endsWith('_MODEL')) {
+                    pairsByAgent[label].model = field;
+                } else {
+                    pairsByAgent[label].others.push(field);
+                }
+            });
+
+            Object.entries(pairsByAgent).forEach(([agentLabel, group]) => {
+                const card = document.createElement('div');
+                card.className = 'agent-card';
+
+                const title = document.createElement('div');
+                title.className = 'agent-card-title';
+                title.textContent = agentLabel;
+                card.appendChild(title);
+
+                const pairWrap = document.createElement('div');
+                pairWrap.className = 'agent-pair';
+                if (group.provider) pairWrap.appendChild(buildFieldElement(group.provider));
+                if (group.model) pairWrap.appendChild(buildFieldElement(group.model));
+                group.others.forEach(f => pairWrap.appendChild(buildFieldElement(f)));
+                card.appendChild(pairWrap);
+
+                fieldContainer.appendChild(card);
+            });
+        }
+
         async function loadConfig() {
             try {
                 const response = await fetch('/api/config');
                 const data = response.ok ? await response.json() : FALLBACK_SCHEMA;
                 currentConfig = {};
                 originalConfig = {};
+                for (const k in fieldElements) delete fieldElements[k];
+                defaultLlmModel = '';
                 renderCategories(data);
             } catch (error) {
                 console.error('Config load error:', error);
@@ -294,51 +615,49 @@
                 if (!schema || !schema.fields || !Array.isArray(schema.fields)) continue;
                 const categoryDiv = document.createElement('div');
                 categoryDiv.className = 'config-category';
+                if (category === 'agent_models') {
+                    categoryDiv.classList.add('agent-models');
+                }
                 
                 const title = document.createElement('h2');
                 title.className = 'config-category-title';
                 title.textContent = schema.title;
                 categoryDiv.appendChild(title);
 
-                for (const field of schema.fields) {
-                    const fieldDiv = document.createElement('div');
-                    fieldDiv.className = 'config-field';
+                const fieldContainer = document.createElement('div');
+                if (category === 'agent_models') {
+                    fieldContainer.className = 'config-grid agent-grid';
+                }
+                categoryDiv.appendChild(fieldContainer);
 
-                    const label = document.createElement('label');
-                    label.className = 'config-field-label';
-                    label.textContent = field.label;
-                    if (field.required) {
-                        const req = document.createElement('span');
-                        req.className = 'required';
-                        req.textContent = ' *';
-                        label.appendChild(req);
+                // 记录 General Settings 里的默认模型，用于显示 default 冻结值
+                if (category === 'general') {
+                    const dlm = (schema.fields || []).find(f => f.key === 'DEFAULT_LLM_MODEL');
+                    if (dlm && dlm.value) {
+                        defaultLlmModel = dlm.value;
                     }
-                    fieldDiv.appendChild(label);
+                }
 
-                    const input = document.createElement('input');
-                    input.type = field.is_secret ? 'password' : 'text';
-                    input.className = 'config-field-input' + (field.has_value ? ' has-value' : '');
-                    input.placeholder = field.placeholder || 'Enter value...';
-                    input.dataset.key = field.key;
-                    input.dataset.placeholder = field.placeholder || '';
-                    input.value = field.is_secret ? '' : (field.value || '');
-                    input.title = field.has_value ? translations.en.hasValue : translations.en.noValue;
-
-                    fieldDiv.appendChild(input);
-
-                    const desc = document.createElement('div');
-                    desc.className = 'config-field-description';
-                    desc.textContent = field.description;
-                    fieldDiv.appendChild(desc);
-
-                    categoryDiv.appendChild(fieldDiv);
-
-                    // Store current config
-                    currentConfig[field.key] = '';
+                if (category === 'agent_models') {
+                    renderAgentModelPairs(fieldContainer, schema.fields);
+                } else {
+                    for (const field of schema.fields) {
+                        fieldContainer.appendChild(buildFieldElement(field));
+                    }
                 }
 
                 container.appendChild(categoryDiv);
             }
+
+            // 初始同步一次 provider → model 的状态
+            Object.keys(fieldElements)
+                .filter(k => k.endsWith('_PROVIDER'))
+                .forEach(key => {
+                    const el = fieldElements[key];
+                    if (el && el.dispatchEvent) {
+                        el.dispatchEvent(new Event('change'));
+                    }
+                });
         }
 
         async function saveConfig() {
@@ -419,6 +738,7 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            ensureModelSuggestionList();
             loadConfig();
 
             document.getElementById('configForm').addEventListener('submit', (e) => {

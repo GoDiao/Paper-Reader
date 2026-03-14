@@ -16,7 +16,7 @@ import threading
 from typing import Optional, Dict, List, Any
 from openai import OpenAI
 
-from config import LLMConfig
+from config import LLMConfig, AgentModelOverride
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,28 @@ def create_llm_client(llm_config: LLMConfig) -> OpenAI:
         api_key=api_key,
         base_url=base_url
     )
+
+
+def build_llm_config_for_agent(
+    global_config: LLMConfig,
+    override: Optional[AgentModelOverride] = None,
+) -> LLMConfig:
+    """
+    Build effective LLM config for a specific agent role.
+
+    If override is not provided, returns a clone of global config.
+    """
+    data = global_config.dict()
+    if override:
+        if override.provider is not None:
+            data["provider"] = override.provider
+        if override.model is not None:
+            data["model"] = override.model
+        if override.temperature is not None:
+            data["temperature"] = override.temperature
+        if override.max_tokens is not None:
+            data["max_tokens"] = override.max_tokens
+    return LLMConfig(**data)
 
 
 def chat_completions_create(
@@ -147,15 +169,52 @@ def chat_completions_create(
                 if is_stream:
                     chunks = []
                     for chunk in response:
-                        if chunk.choices and chunk.choices[0].delta.content:
-                            content = chunk.choices[0].delta.content
+                        if chunk is None:
+                            continue
+                        choices = getattr(chunk, "choices", None)
+                        if not choices or len(choices) == 0:
+                            continue
+                        delta = getattr(choices[0], "delta", None)
+                        if delta is None:
+                            continue
+                        content = getattr(delta, "content", None) if delta else None
+                        if content:
                             chunks.append(content)
                             if progress_callback:
                                 progress_callback.stream_token(agent_key, content)
-                    
                     result = "".join(chunks)
                 else:
-                    result = response.choices[0].message.content
+                    # Support both object and dict-like response (e.g. OpenRouter)
+                    try:
+                        if response is None:
+                            raise ValueError("API returned no response.")
+                        choices = getattr(response, "choices", None)
+                        if choices is None and hasattr(response, "__getitem__"):
+                            choices = response.get("choices") if callable(getattr(response, "get", None)) else None
+                        if choices is None or (hasattr(choices, "__len__") and len(choices) == 0):
+                            raise ValueError(
+                                f"API returned no choices (response.choices is {choices!r}). "
+                                "Check provider/model and API response format."
+                            )
+                        first = next(iter(choices), None) if choices is not None else None
+                        if first is None:
+                            raise ValueError("API response has no first choice.")
+                        msg = getattr(first, "message", None)
+                        if msg is None and hasattr(first, "__getitem__"):
+                            msg = first.get("message") if callable(getattr(first, "get", None)) else None
+                        if msg is None:
+                            raise ValueError("API response.choices[0].message is missing.")
+                        result = getattr(msg, "content", None)
+                        if result is None and hasattr(msg, "get"):
+                            result = msg.get("content")
+                        result = result or ""
+                    except (TypeError, KeyError) as e:
+                        # e.g. 'NoneType' object is not subscriptable when provider returns malformed body
+                        logger.warning(
+                            "API response structure unexpected (%s): %s. Using empty content.",
+                            agent_name, e
+                        )
+                        result = ""
                 
                 # Emit progress: success
                 if progress_callback:

@@ -36,12 +36,34 @@ CONFIG_SCHEMA = {
     "general": {
         "title": "General Settings",
         "fields": [
+            ConfigField("DEFAULT_LLM_PROVIDER", "Default LLM Provider", "Homepage analysis uses this provider (deepseek/openai/siliconflow/openrouter)", "deepseek", False),
+            ConfigField("DEFAULT_LLM_MODEL", "Default LLM Model", "Homepage analysis uses this default model", "deepseek-chat", False),
             ConfigField("DEEPSEEK_API_KEY", "DeepSeek API Key", "Default provider for paper analysis", "sk-...", True, True),
             ConfigField("OPENAI_API_KEY", "OpenAI API Key", "Alternative provider", "sk-..."),
             ConfigField("SILICONFLOW_API_KEY", "SiliconFlow API Key", "Another alternative provider", "sk-..."),
+            ConfigField("OPENROUTER_API_KEY", "OpenRouter API Key", "OpenRouter provider key", "sk-or-v1-..."),
             ConfigField("LLM_TIMEOUT_S", "LLM Timeout (seconds)", "Request timeout for LLM API calls", "60.0", False),
             ConfigField("LLM_MAX_RETRIES", "Max Retries", "Maximum retry attempts for failed API calls", "3", False),
             ConfigField("LLM_MAX_CONCURRENCY", "Max Concurrency", "Global concurrency limit (0 = disabled)", "0", False),
+        ]
+    },
+    "agent_models": {
+        "title": "Per-Agent Models",
+        "fields": [
+            ConfigField("AGENT_ARCHITECT_PROVIDER", "Architect Provider", "openai/deepseek/siliconflow/openrouter (optional)", "deepseek", False),
+            ConfigField("AGENT_ARCHITECT_MODEL", "Architect Model", "Model override for Architect", "deepseek-chat", False),
+            ConfigField("AGENT_CONTEXT_HUNTER_PROVIDER", "Context Hunter Provider", "openai/deepseek/siliconflow/openrouter (optional)", "deepseek", False),
+            ConfigField("AGENT_CONTEXT_HUNTER_MODEL", "Context Hunter Model", "Model override for Context Hunter", "deepseek-chat", False),
+            ConfigField("AGENT_MATH_SPECIALIST_PROVIDER", "Math Specialist Provider", "openai/deepseek/siliconflow/openrouter (optional)", "deepseek", False),
+            ConfigField("AGENT_MATH_SPECIALIST_MODEL", "Math Specialist Model", "Model override for Math Specialist", "deepseek-reasoner", False),
+            ConfigField("AGENT_DATA_AUDITOR_PROVIDER", "Data Auditor Provider", "openai/deepseek/siliconflow/openrouter (optional)", "deepseek", False),
+            ConfigField("AGENT_DATA_AUDITOR_MODEL", "Data Auditor Model", "Model override for Data Auditor", "deepseek-chat", False),
+            ConfigField("AGENT_GAP_AGENT_PROVIDER", "Gap Agent Provider", "openai/deepseek/siliconflow/openrouter (optional)", "deepseek", False),
+            ConfigField("AGENT_GAP_AGENT_MODEL", "Gap Agent Model", "Model override for Gap Agent", "deepseek-chat", False),
+            ConfigField("AGENT_EDITOR_ENGLISH_PROVIDER", "Editor (EN) Provider", "openai/deepseek/siliconflow/openrouter (optional)", "openai", False),
+            ConfigField("AGENT_EDITOR_ENGLISH_MODEL", "Editor (EN) Model", "Model override for English Editor", "gpt-4o", False),
+            ConfigField("AGENT_EDITOR_CHINESE_PROVIDER", "Editor (ZH) Provider", "openai/deepseek/siliconflow/openrouter (optional)", "openai", False),
+            ConfigField("AGENT_EDITOR_CHINESE_MODEL", "Editor (ZH) Model", "Model override for Chinese Editor", "gpt-4o", False),
         ]
     },
     "web_search": {

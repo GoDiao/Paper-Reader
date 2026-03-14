@@ -13,6 +13,9 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 
+ProviderType = Literal["openai", "deepseek", "siliconflow", "openrouter"]
+
+
 class LLMConfig(BaseModel):
     """LLM API Configuration"""
     
@@ -37,11 +40,13 @@ class LLMConfig(BaseModel):
         "o1": 32768,                  # OpenAI reasoning model
         "o1-mini": 32768,
         "o1-preview": 32768,
+        # OpenRouter curated models
+        "openrouter/hunter-alpha": 8192,
     }
     
-    provider: Literal["openai", "deepseek", "siliconflow"] = Field(
+    provider: ProviderType = Field(
         default="deepseek",
-        description="API provider: 'openai', 'deepseek', or 'siliconflow'"
+        description="API provider: 'openai', 'deepseek', 'siliconflow', or 'openrouter'"
     )
     
     api_key: Optional[str] = Field(
@@ -78,7 +83,7 @@ class LLMConfig(BaseModel):
     def is_thinking_model(self) -> bool:
         """Check if the current model is a reasoning/thinking model"""
         thinking_models = {
-            "deepseek-r1", "deepseek-r1-distill", 
+            "deepseek-reasoner", "deepseek-r1-distill",
             "deepseek-ai/DeepSeek-R1", # Silicon Flow R1
             "moonshotai/Kimi-K2-Thinking", # Kimi Thinking
             "o1", "o1-mini", "o1-preview"
@@ -94,6 +99,8 @@ class LLMConfig(BaseModel):
             key = os.getenv("OPENAI_API_KEY")
         elif self.provider == "deepseek":
             key = os.getenv("DEEPSEEK_API_KEY")
+        elif self.provider == "openrouter":
+            key = os.getenv("OPENROUTER_API_KEY")
         else:  # siliconflow
             key = os.getenv("SILICONFLOW_API_KEY")
         
@@ -113,8 +120,108 @@ class LLMConfig(BaseModel):
             return "https://api.deepseek.com"
         elif self.provider == "siliconflow":
             return "https://api.siliconflow.com/v1"
+        elif self.provider == "openrouter":
+            return "https://openrouter.ai/api/v1"
         
         return None  # Use default for OpenAI
+
+
+class AgentModelOverride(BaseModel):
+    """Optional per-agent LLM overrides."""
+
+    provider: Optional[ProviderType] = Field(
+        default=None,
+        description="Override provider for this agent"
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="Override model for this agent"
+    )
+    temperature: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Override temperature for this agent"
+    )
+    max_tokens: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Override max tokens for this agent"
+    )
+
+    def is_empty(self) -> bool:
+        return (
+            self.provider is None
+            and self.model is None
+            and self.temperature is None
+            and self.max_tokens is None
+        )
+
+
+class PerAgentModelConfig(BaseModel):
+    """Per-agent model overrides for hierarchical orchestrator roles."""
+
+    architect: Optional[AgentModelOverride] = None
+    context_hunter: Optional[AgentModelOverride] = None
+    math_specialist: Optional[AgentModelOverride] = None
+    data_auditor: Optional[AgentModelOverride] = None
+    gap_agent: Optional[AgentModelOverride] = None
+    editor_english: Optional[AgentModelOverride] = None
+    editor_chinese: Optional[AgentModelOverride] = None
+
+    @classmethod
+    def from_env(cls) -> "PerAgentModelConfig":
+        """
+        Build per-agent override config from environment variables.
+
+        Naming convention (per agent role):
+        - AGENT_<ROLE>_PROVIDER
+        - AGENT_<ROLE>_MODEL
+        - AGENT_<ROLE>_TEMPERATURE
+        - AGENT_<ROLE>_MAX_TOKENS
+        """
+        role_env_map = {
+            "architect": "ARCHITECT",
+            "context_hunter": "CONTEXT_HUNTER",
+            "math_specialist": "MATH_SPECIALIST",
+            "data_auditor": "DATA_AUDITOR",
+            "gap_agent": "GAP_AGENT",
+            "editor_english": "EDITOR_ENGLISH",
+            "editor_chinese": "EDITOR_CHINESE",
+        }
+
+        data = {}
+        for role, suffix in role_env_map.items():
+            provider = (os.getenv(f"AGENT_{suffix}_PROVIDER") or "").strip() or None
+            model = (os.getenv(f"AGENT_{suffix}_MODEL") or "").strip() or None
+
+            temp_raw = (os.getenv(f"AGENT_{suffix}_TEMPERATURE") or "").strip()
+            max_tokens_raw = (os.getenv(f"AGENT_{suffix}_MAX_TOKENS") or "").strip()
+
+            temperature: Optional[float] = None
+            if temp_raw:
+                try:
+                    temperature = float(temp_raw)
+                except ValueError:
+                    temperature = None
+
+            max_tokens: Optional[int] = None
+            if max_tokens_raw:
+                try:
+                    max_tokens = int(max_tokens_raw)
+                except ValueError:
+                    max_tokens = None
+
+            override = AgentModelOverride(
+                provider=provider,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            if not override.is_empty():
+                data[role] = override
+
+        return cls(**data)
 
 
 
@@ -279,6 +386,7 @@ class AppConfig(BaseModel):
     """Main Application Configuration"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    per_agent_model: PerAgentModelConfig = Field(default_factory=PerAgentModelConfig)
     parser: ParserConfig = Field(default_factory=ParserConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     web_search: WebSearchConfig = Field(default_factory=WebSearchConfig)
@@ -288,7 +396,7 @@ class AppConfig(BaseModel):
     @classmethod
     def from_args(
         cls,
-        provider: str = "deepseek",
+        provider: ProviderType = "deepseek",
         model: Optional[str] = None,
         output_dir: str = "./output",
         use_gpu: bool = True,
@@ -298,7 +406,12 @@ class AppConfig(BaseModel):
         
         # Set default model based on provider
         if model is None:
-            model = "deepseek-chat" if provider == "deepseek" else "gpt-4o"
+            if provider == "deepseek":
+                model = "deepseek-chat"
+            elif provider == "openrouter":
+                model = "openai/gpt-4o-mini"
+            else:
+                model = "gpt-4o"
         
         return cls(
             llm=LLMConfig(provider=provider, model=model),
